@@ -28,13 +28,7 @@ Credentials are saved in `~/.maradocs/config.json` with file mode `0600`. See [C
 Install the MaraDocs skill in the agent environment, or make the CLI/API available to the agent:
 
 ```bash
-npx skills add @maradocs/skill
-```
-
-Some runtimes use a different skills command, such as:
-
-```bash
-skills install @maradocs/skill
+npx skills add https://github.com/bnap00/maradocs --skill maradocs-publish
 ```
 
 Create the API key in the MaraDocs dashboard with the least scope the agent needs:
@@ -43,7 +37,7 @@ Create the API key in the MaraDocs dashboard with the least scope the agent need
 - `read`: list metadata and fetch private reports.
 - `admin`: use only for trusted automation that needs all machine API operations.
 
-Environment variables are optional. Use them for CI jobs, containers, or agent runtimes that cannot read the CLI config file:
+The skill reads the same `~/.maradocs/config.json` file created by `maradocs auth login`. Environment variables are optional overrides for CI jobs, containers, or agent runtimes that cannot read the CLI config file:
 
 ```bash
 export MARADOCS_SERVER_URL="https://docs.example.com"
@@ -136,29 +130,23 @@ See [REST API](API.md) for response shapes, endpoints, and error formats.
 
 MaraDocs includes a skills.sh-compatible package with a `publish.sh` wrapper. Use this when the agent platform supports skills or packaged tool wrappers.
 
-Install with `npx skills`:
+Install with the skills.sh CLI:
 
 ```bash
-npx skills add @maradocs/skill
-```
-
-Or with runtimes that use `skills install`:
-
-```bash
-skills install @maradocs/skill
+npx skills add https://github.com/bnap00/maradocs --skill maradocs-publish
 ```
 
 Direct script form:
 
 ```bash
-MARADOCS_SERVER_URL="https://docs.example.com" \
-MARADOCS_API_KEY="mdo_..." \
 report_path="./report" \
 repo="demo" \
 doc="hello" \
 access="private" \
-packages/skill/skill/scripts/publish.sh
+bash packages/skill/skill/scripts/publish.sh
 ```
+
+Set `MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only to override saved CLI credentials.
 
 See [CLI usage](CLI.md#agent-skill) for the current script options.
 

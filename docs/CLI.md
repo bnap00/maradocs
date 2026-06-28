@@ -121,13 +121,11 @@ The server enforces path safety during extraction and serving. See [Security mod
 The `@maradocs/skill` package includes a `publish.sh` wrapper for agent runtimes:
 
 ```bash
-MARADOCS_SERVER_URL="https://docs.example.com" \
-MARADOCS_API_KEY="mdo_..." \
 report_path="./report" \
 repo="revenue" \
 doc="monthly-june-2026" \
 access="private" \
-packages/skill/skill/scripts/publish.sh
+bash packages/skill/skill/scripts/publish.sh
 ```
 
-The skill creates the repository if needed, uploads a zip bundle, and prints the API JSON response.
+The skill reads `~/.maradocs/config.json` created by `maradocs auth login`. Set `MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only to override the saved CLI config. The skill creates the repository if needed, uploads a zip bundle, and prints the API JSON response. If the document already exists, it updates the document with a new immutable version.

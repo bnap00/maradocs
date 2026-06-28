@@ -78,6 +78,10 @@ export async function buildApp(config: ServerConfig): Promise<BuiltApp> {
       reply.code(413).send({ error: "payload_too_large", message: "Upload too large" });
       return;
     }
+    if ((err as { statusCode?: number }).statusCode === 429) {
+      reply.code(429).send({ error: "rate_limited", message: "Too many requests" });
+      return;
+    }
     req.log.error({ err }, "Unhandled error");
     reply.code(500).send({ error: "internal_error", message: "Internal server error" });
   });

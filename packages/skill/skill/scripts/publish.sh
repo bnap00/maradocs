@@ -14,6 +14,22 @@ require() {
   fi
 }
 
+json_config_value() {
+  local key="$1"
+  local file="$2"
+  sed -nE "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" "$file" | head -n 1
+}
+
+config_file="${MARADOCS_CONFIG_FILE:-${HOME:-}/.maradocs/config.json}"
+if [ -f "$config_file" ]; then
+  if [ -z "${MARADOCS_SERVER_URL:-}" ]; then
+    MARADOCS_SERVER_URL="$(json_config_value server "$config_file")"
+  fi
+  if [ -z "${MARADOCS_API_KEY:-}" ]; then
+    MARADOCS_API_KEY="$(json_config_value apiKey "$config_file")"
+  fi
+fi
+
 require MARADOCS_SERVER_URL
 require MARADOCS_API_KEY
 require report_path
@@ -58,12 +74,28 @@ trap 'rm -f "$tmp_zip"' EXIT
 rm -f "$tmp_zip"
 ( cd "$report_path" && zip -q -r "$tmp_zip" . -x '.*' -x 'node_modules/*' )
 
-# 3. Publish the bundle.
+# 3. Publish the bundle. POST creates a new document; if it already exists,
+#    retry with PUT so repeat publishes create a new immutable version.
 form=( -F "doc=${doc}" -F "file=@${tmp_zip};type=application/zip" )
 if [ -n "${access:-}" ]; then form+=( -F "access=${access}" ); fi
 if [ -n "${password:-}" ]; then form+=( -F "password=${password}" ); fi
 
-curl -fsS -X POST "${server}/api/v1/repos/${repo}/docs" \
+response_file="$(mktemp -t maradocs-response-XXXXXX.json)"
+trap 'rm -f "$tmp_zip" "$response_file"' EXIT
+
+status="$(curl -sS -o "$response_file" -w "%{http_code}" -X POST "${server}/api/v1/repos/${repo}/docs" \
   -H "Authorization: Bearer ${MARADOCS_API_KEY}" \
-  "${form[@]}"
+  "${form[@]}")"
+
+if [ "$status" = "409" ]; then
+  status="$(curl -sS -o "$response_file" -w "%{http_code}" -X PUT "${server}/api/v1/repos/${repo}/docs/${doc}" \
+    -H "Authorization: Bearer ${MARADOCS_API_KEY}" \
+    "${form[@]}")"
+fi
+
+cat "$response_file"
 echo
+
+if [ "${status#2}" = "$status" ]; then
+  exit 1
+fi

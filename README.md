@@ -66,7 +66,7 @@ maradocs auth login --server https://docs.example.com --api-key mdo_...
 
 Then let the agent publish a static report folder through one of these paths without handling raw credentials in every agent prompt:
 
-- **Skill**: install the packaged MaraDocs skill with `npx skills add @maradocs/skill` or your agent runtime's skills installer
+- **Skill**: install the packaged MaraDocs skill with `npx skills add https://github.com/bnap00/maradocs --skill maradocs-publish` or your agent runtime's skills installer
 - **CLI**: `maradocs publish ./report --repo demo --doc hello`
 - **REST API**: upload a zip bundle to `/api/v1/repos/:repo/docs`
 
@@ -91,10 +91,12 @@ See [Agent integration](docs/AGENTS.md) for detailed setup patterns.
 MaraDocs ships a skills.sh-compatible package for agent runtimes:
 
 ```bash
-skills install @maradocs/skill
+npx skills add https://github.com/bnap00/maradocs --skill maradocs-publish
 ```
 
-Set these in the agent runtime:
+The npm package is scoped: install the CLI as `@maradocs/cli`. The skill reuses the CLI config saved by `maradocs auth login`.
+
+For CI or isolated agent runtimes, override the saved CLI config with environment variables:
 
 ```bash
 MARADOCS_SERVER_URL="https://docs.example.com"

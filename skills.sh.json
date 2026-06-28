@@ -1,0 +1,11 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Publishing",
+      "description": "Skills for publishing agent-generated static HTML reports with MaraDocs.",
+      "skills": ["maradocs-publish"]
+    }
+  ]
+}

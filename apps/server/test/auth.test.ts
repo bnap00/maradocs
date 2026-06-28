@@ -40,6 +40,46 @@ test("login rejects wrong password", async () => {
   assert.equal(res.statusCode, 401);
 });
 
+test("login rate limit returns a 429 response", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "maradocs-auth-rate-limit-"));
+  const built = await buildApp(
+    loadConfig({
+      NODE_ENV: "development",
+      DATA_DIR: dir,
+      PORT: "0",
+      ADMIN_PASSWORD: PASSWORD,
+      BCRYPT_ROUNDS: "4",
+      NO_PRETTY_LOG: "1",
+    } as NodeJS.ProcessEnv),
+  );
+  try {
+    await built.app.ready();
+
+    for (let i = 0; i < 5; i += 1) {
+      const res = await built.app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        payload: { password: PASSWORD },
+      });
+      assert.equal(res.statusCode, 200);
+    }
+
+    const limited = await built.app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { password: PASSWORD },
+    });
+    assert.equal(limited.statusCode, 429);
+    assert.deepEqual(limited.json(), {
+      error: "rate_limited",
+      message: "Too many requests",
+    });
+  } finally {
+    await built.app.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("login with correct password returns a bearer token", async () => {
   const res = await app.inject({
     method: "POST",

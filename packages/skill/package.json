@@ -18,6 +18,7 @@
   },
   "scripts": {
     "build": "node ./scripts/check.mjs",
+    "test": "node --test ./test/*.test.mjs",
     "typecheck": "node ./scripts/check.mjs"
   }
 }

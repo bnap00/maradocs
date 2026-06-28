@@ -9,12 +9,12 @@ metadata:
   homepage: https://github.com/bnap00/maradocs
 inputs:
   - name: MARADOCS_SERVER_URL
-    required: true
-    description: Base URL of the MaraDocs publisher (e.g. https://docs.example.com)
+    required: false
+    description: Base URL of the MaraDocs publisher (e.g. https://docs.example.com). Falls back to ~/.maradocs/config.json from `maradocs auth login`.
   - name: MARADOCS_API_KEY
-    required: true
+    required: false
     secret: true
-    description: MaraDocs API key for authenticating machine publishing (create in the dashboard under API Keys).
+    description: MaraDocs API key for authenticating machine publishing. Falls back to ~/.maradocs/config.json from `maradocs auth login`.
   - name: report_path
     required: true
     description: Path to the folder containing index.html and assets.
@@ -48,14 +48,16 @@ link with controlled access.
 ## Usage
 
 ```bash
-MARADOCS_SERVER_URL="https://docs.example.com" \
-MARADOCS_API_KEY="mdo_..." \
 report_path="./report" \
 repo="revenue" \
 doc="monthly-june-2026" \
 access="private" \
-./scripts/publish.sh
+bash ./scripts/publish.sh
 ```
+
+The script reuses credentials saved by `maradocs auth login`. Set
+`MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only when you need to override the
+saved CLI config, such as in CI or an isolated agent runtime.
 
 The script prints a JSON object on success:
 
@@ -73,7 +75,7 @@ The script prints a JSON object on success:
 ## Behaviour & guarantees
 
 - The repository is created automatically if it does not exist.
-- Each publish creates a new **immutable version**; the document URL always
+- Each publish creates or updates the document with a new **immutable version**; the document URL always
   resolves to the latest version, and `versionUrl` pins this exact version.
 - Paths are validated server-side: `..`, absolute paths, and symlinks are
   rejected.

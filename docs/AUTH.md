@@ -59,13 +59,13 @@ maradocs publish ./dist/report --repo my-project --doc my-report
 Or with the bash skill:
 
 ```bash
-MARADOCS_SERVER_URL="https://docs.example.com" \
-MARADOCS_API_KEY="mdo_..." \
 report_path="./dist/report" \
 repo="my-project" \
 doc="my-report" \
-./scripts/publish.sh
+bash ./scripts/publish.sh
 ```
+
+The bash skill reuses `~/.maradocs/config.json` from `maradocs auth login`. Set `MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only to override saved CLI credentials.
 
 ## Revoking a key
 

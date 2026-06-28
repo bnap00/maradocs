@@ -19,5 +19,10 @@ if (!md.startsWith("---")) {
   console.error("SKILL.md must start with YAML frontmatter");
   ok = false;
 }
+const publishScript = path.join(root, "skill/scripts/publish.sh");
+if ((fs.statSync(publishScript).mode & 0o111) === 0) {
+  console.error("skill/scripts/publish.sh must be executable");
+  ok = false;
+}
 if (!ok) process.exit(1);
 console.log("skill bundle OK");
