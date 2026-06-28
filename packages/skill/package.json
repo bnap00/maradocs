@@ -1,6 +1,6 @@
 {
   "name": "@maradocs/skill",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "skills.sh-compatible skill for publishing static HTML reports to a MaraDocs server.",
   "license": "MIT",
   "author": "Bharat Parsiya",
