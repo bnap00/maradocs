@@ -1,0 +1,40 @@
+{
+  "name": "@maradocs/cli",
+  "version": "0.1.0",
+  "description": "CLI for publishing static HTML reports to a MaraDocs server and getting durable URLs.",
+  "license": "MIT",
+  "author": "Bharat Parsiya",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bnap00/maradocs",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/bnap00/maradocs#readme",
+  "keywords": ["maradocs", "cli", "publish", "reports", "agents", "ai", "html", "static"],
+  "type": "module",
+  "bin": {
+    "maradocs": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@maradocs/shared": "workspace:*",
+    "@types/adm-zip": "^0.5.7",
+    "adm-zip": "^0.5.16",
+    "commander": "^12.1.0",
+    "picocolors": "^1.1.1",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

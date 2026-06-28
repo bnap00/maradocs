@@ -1,0 +1,26 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+*.tsbuildinfo
+
+# MaraDocs runtime data
+maradocs-data/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# CLI local config
+.maradocs/
+
+# Local agent/workflow state
+.superpowers/
+.fallow/
+docs/superpowers/

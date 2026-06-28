@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+.git
+maradocs-data
+data
+*.db
+*.log
+.env
+.env.*
+!.env.example
+apps/dashboard/dist
+apps/server/public

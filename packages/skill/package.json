@@ -1,0 +1,23 @@
+{
+  "name": "@maradocs/skill",
+  "version": "0.1.0",
+  "description": "skills.sh-compatible skill for publishing static HTML reports to a MaraDocs server.",
+  "license": "MIT",
+  "author": "Bharat Parsiya",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bnap00/maradocs",
+    "directory": "packages/skill"
+  },
+  "homepage": "https://github.com/bnap00/maradocs#readme",
+  "keywords": ["maradocs", "skill", "skills.sh", "agents", "ai", "publish", "reports", "html"],
+  "type": "module",
+  "files": ["skill", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ./scripts/check.mjs",
+    "typecheck": "node ./scripts/check.mjs"
+  }
+}

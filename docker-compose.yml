@@ -1,0 +1,28 @@
+services:
+  maradocs:
+    build: .
+    image: maradocs:latest
+    container_name: maradocs
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./maradocs-data:/data
+    environment:
+      - NODE_ENV=production
+      - PORT=8787
+      - DATA_DIR=/data
+      # Set to your external URL so publish responses return shareable links.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8787}
+      - DEFAULT_REPO_ACCESS=${DEFAULT_REPO_ACCESS:-private}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-50}
+      # Required in production for signed password cookies.
+      - COOKIE_SECRET=${COOKIE_SECRET:?set COOKIE_SECRET in .env}
+      # Required. Dashboard login password; hashed in memory at startup.
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

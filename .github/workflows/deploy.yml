@@ -1,0 +1,39 @@
+name: Deploy to Dokploy
+
+# Auto-deploy to Dokploy on pushes to the default branch. Dokploy builds the
+# image from the Dockerfile and redeploys when its deploy webhook is called.
+#
+# Setup (one time):
+#   1. In Dokploy, create an Application from this Git repo (Build type:
+#      Dockerfile). Mount a volume at /data and set the environment variables
+#      from .env.example.
+#   2. Copy the application's "Deploy webhook" URL.
+#   3. Add it as a GitHub Actions secret named DOKPLOY_DEPLOY_WEBHOOK_URL.
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  trigger-dokploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dokploy deployment
+        env:
+          WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "DOKPLOY_DEPLOY_WEBHOOK_URL is not set — skipping deploy."
+            echo "Add the secret to enable automatic Dokploy deployments."
+            exit 0
+          fi
+          echo "Calling Dokploy deploy webhook…"
+          status=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$WEBHOOK")
+          echo "Dokploy responded with HTTP $status"
+          case "$status" in
+            2*) echo "Deployment triggered." ;;
+            *) echo "Unexpected response"; exit 1 ;;
+          esac
