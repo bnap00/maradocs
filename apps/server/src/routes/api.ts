@@ -27,7 +27,7 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   const ctx = app.ctx;
   app.addHook("preHandler", requireMachine(ctx));
 
-  app.get("/repos", async (req) => ({
+  app.get("/repos", async () => ({
     repos: listRepos(ctx),
   }));
 

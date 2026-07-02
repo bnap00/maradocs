@@ -49,7 +49,7 @@ What each command covers:
 | Command | Coverage |
 |---------|----------|
 | `pnpm typecheck` | TypeScript across workspace packages |
-| `pnpm lint` | Dashboard ESLint rules |
+| `pnpm lint` | ESLint for server, CLI, shared, and scripts (root `eslint.config.js`) plus the dashboard's own config |
 | `pnpm test` | Server integration and unit tests with real SQLite |
 | `pnpm build` | Shared package, CLI bundle, skill validation, server, dashboard |
 | `pnpm e2e:smoke` | Built server + built CLI publish flow against temporary data |

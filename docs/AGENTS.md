@@ -17,6 +17,8 @@ npm install -g @maradocs/cli
 maradocs auth login --server https://docs.example.com --api-key mdo_...
 ```
 
+No API key yet? `maradocs auth bootstrap --server https://docs.example.com` mints a publish-scoped key with the dashboard admin password and saves it — no dashboard visit needed.
+
 For local development:
 
 ```bash
@@ -71,8 +73,10 @@ report/
 Then it should publish the folder to a repository and document slug:
 
 ```bash
-maradocs publish ./report --repo demo --doc hello
+maradocs publish ./report --repo demo --doc hello --json
 ```
+
+The command is self-healing for the two situations agents hit most: a missing repository is created automatically, and republishing an existing document creates a new immutable version — no extra flags or pre-steps required. With `--json`, stdout carries only the result JSON (progress goes to stderr).
 
 The response includes:
 
@@ -101,11 +105,9 @@ maradocs publish ./report \
   --access private
 ```
 
-Use `--replace` when the agent should publish a new version of an existing document:
+Republishing the same `--repo`/`--doc` automatically creates a new immutable version. Use `--replace` only when the publish should fail unless the document already exists, and `--no-create-repo` when a missing repository should be an error instead of being created.
 
-```bash
-maradocs publish ./report --repo demo --doc hello --replace
-```
+All read commands support `--json` for machine-readable output (`repo list`, `doc list`, `doc versions`, `auth status`), so agents can inspect state without scraping formatted text.
 
 ## REST API Integration
 
@@ -124,7 +126,7 @@ curl -sS -X POST "$MARADOCS_SERVER_URL/api/v1/repos/demo/docs" \
   -F file=@report.zip
 ```
 
-See [REST API](API.md) for response shapes, endpoints, and error formats.
+See [REST API](API.md) for response shapes, endpoints, and error formats. The server also self-describes at `GET /api/v1/openapi.json` (OpenAPI 3.1), which agents can fetch to discover the full surface programmatically.
 
 ## Skill Integration
 

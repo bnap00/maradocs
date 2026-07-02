@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { resolveConfig } from "../config.js";
 import { MaraClient } from "../client.js";
-import { accessBadge, formatBytes, ui } from "../output.js";
+import { accessBadge, formatBytes, printJson, setJsonMode, ui } from "../output.js";
 import pc from "picocolors";
 
 function client(): MaraClient {
@@ -23,8 +23,14 @@ export function registerDoc(program: Command): void {
     .command("list <repo>")
     .alias("ls")
     .description("List documents in a repository")
-    .action(async (repo: string) => {
+    .option("--json", "Print documents as JSON")
+    .action(async (repo: string, opts: { json?: boolean }) => {
+      setJsonMode(Boolean(opts.json));
       const { docs } = await client().listDocs(repo);
+      if (opts.json) {
+        printJson(docs);
+        return;
+      }
       if (docs.length === 0) {
         ui.info(`No documents in ${repo}.`);
         return;
@@ -40,9 +46,15 @@ export function registerDoc(program: Command): void {
   doc
     .command("versions <target>")
     .description("List versions of a document (repo/doc)")
-    .action(async (target: string) => {
+    .option("--json", "Print versions as JSON")
+    .action(async (target: string, opts: { json?: boolean }) => {
+      setJsonMode(Boolean(opts.json));
       const { repo, doc: docSlug } = parseTarget(target);
       const { versions } = await client().listVersions(repo, docSlug);
+      if (opts.json) {
+        printJson(versions);
+        return;
+      }
       ui.heading(`Versions of ${repo}/${docSlug}`);
       for (const v of versions) {
         const tag = v.isLatest ? pc.green(" (latest)") : "";
@@ -59,13 +71,19 @@ export function registerDoc(program: Command): void {
     .command("rollback <target>")
     .description("Promote a previous version to latest (repo/doc)")
     .requiredOption("-v, --version <n>", "Version number to promote")
-    .action(async (target: string, opts: { version: string }) => {
+    .option("--json", "Print the updated document as JSON")
+    .action(async (target: string, opts: { version: string; json?: boolean }) => {
+      setJsonMode(Boolean(opts.json));
       const { repo, doc: docSlug } = parseTarget(target);
       const { doc: updated } = await client().rollback(
         repo,
         docSlug,
         Number(opts.version),
       );
+      if (opts.json) {
+        printJson(updated);
+        return;
+      }
       ui.success(
         `Rolled ${repo}/${docSlug} back to v${opts.version} ` +
           `(now latest: v${updated.latestVersionNumber}).`,
@@ -77,13 +95,24 @@ export function registerDoc(program: Command): void {
     .alias("rm")
     .description("Delete a document and all versions (repo/doc)")
     .option("-y, --yes", "Skip confirmation")
-    .action(async (target: string, opts: { yes?: boolean }) => {
+    .option("--json", "Print the deletion result as JSON")
+    .action(async (target: string, opts: { yes?: boolean; json?: boolean }) => {
+      setJsonMode(Boolean(opts.json));
       const { repo, doc: docSlug } = parseTarget(target);
       if (!opts.yes) {
+        if (opts.json) {
+          printJson({ deleted: false, reason: "confirmation_required", hint: "re-run with --yes" });
+          process.exitCode = 1;
+          return;
+        }
         ui.warn(`This permanently deletes ${repo}/${docSlug}. Re-run with --yes to confirm.`);
         return;
       }
       await client().deleteDoc(repo, docSlug);
+      if (opts.json) {
+        printJson({ deleted: true, repo, doc: docSlug });
+        return;
+      }
       ui.success(`Deleted ${repo}/${docSlug}.`);
     });
 }

@@ -4,14 +4,45 @@ MaraDocs ships as a single Docker container: a Fastify API, a static file
 server, the SQLite metadata store, and the password-protected dashboard, all
 backed by a mounted `/data` volume.
 
-## Quick start (Docker Compose)
+## One-command setup (macOS / Linux)
+
+For a personal machine or single host, the setup script does everything —
+generates secrets, starts the prebuilt image, mints an API key, and
+configures the CLI:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bnap00/maradocs/main/scripts/setup.sh | bash
+```
+
+It installs into `~/maradocs` (override with `MARADOCS_HOME`), listens on
+port 8787 (`MARADOCS_PORT`), and uses `ghcr.io/bnap00/maradocs:latest`
+(`MARADOCS_IMAGE`). Re-running it is safe: existing secrets and data are
+reused.
+
+## Prebuilt image
+
+Every push to `main` and every `v*` tag publishes a multi-arch
+(amd64 + arm64) image to GitHub Container Registry:
+
+```text
+ghcr.io/bnap00/maradocs:latest    # tracks main
+ghcr.io/bnap00/maradocs:<version> # tagged releases
+```
+
+Use it anywhere you'd otherwise build from the Dockerfile.
+
+## Quick start (Docker Compose, from source)
 
 ```bash
 cp .env.example .env
-# edit .env: set COOKIE_SECRET and ADMIN_PASSWORD
+# edit .env: set COOKIE_SECRET (openssl rand -hex 32) and ADMIN_PASSWORD
 docker compose up -d --build
 # open http://localhost:8787/dashboard/
 ```
+
+`.env.example` ships with `COOKIE_SECRET` and `ADMIN_PASSWORD` empty on
+purpose: `docker compose up` fails with a clear message until you set real
+values, and the server refuses known placeholder values in production.
 
 The `./maradocs-data` directory is mounted at `/data` and holds `docs.db`
 plus the `repositories/` bundle tree.

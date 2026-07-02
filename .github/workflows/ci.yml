@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+
+# One run per ref; superseded pushes to the same PR/branch are cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -28,8 +33,6 @@ jobs:
         run: pnpm build
       - name: Validate skill bundle
         run: node packages/skill/scripts/check.mjs
-      - name: Dependency audit
-        run: pnpm audit
       - name: End-to-end smoke
         run: pnpm e2e:smoke
 

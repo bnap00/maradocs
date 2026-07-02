@@ -20,34 +20,50 @@ maradocs publish ./report --repo demo --doc hello
 
 ## Quick Start
 
-### 1. Start the server
+### One-command setup (macOS / Linux)
+
+With Docker installed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bnap00/maradocs/main/scripts/setup.sh | bash
+```
+
+The script starts the server from the prebuilt `ghcr.io/bnap00/maradocs` image (in `~/maradocs`, on port 8787), generates an admin password and cookie secret, mints a publish-scoped API key, and configures the `maradocs` CLI if npm is available. Then publish your first report:
+
+```bash
+mkdir -p report && printf '<h1>Hello from MaraDocs</h1>\n' > report/index.html
+maradocs publish ./report --repo demo --doc hello
+```
+
+The report is available at `http://localhost:8787/r/demo/hello/`. Repositories are created on first publish; repeat publishes create new immutable versions automatically.
+
+### Manual setup
+
+#### 1. Start the server
 
 ```bash
 cp .env.example .env
-# Set COOKIE_SECRET and ADMIN_PASSWORD in .env.
+# Set COOKIE_SECRET (openssl rand -hex 32) and ADMIN_PASSWORD in .env.
 docker compose up -d --build
 ```
 
-Open `http://localhost:8787/dashboard/`, sign in with `ADMIN_PASSWORD`, and create an API key under **API Keys**.
-
-### 2. Install and authenticate the CLI
+#### 2. Install and authenticate the CLI
 
 ```bash
 npm install -g @maradocs/cli
-maradocs auth login --server http://localhost:8787 --api-key mdo_...
+maradocs auth bootstrap --server http://localhost:8787
 ```
 
-### 3. Publish a report
+`auth bootstrap` prompts for `ADMIN_PASSWORD`, mints a publish-scoped API key, and saves it to `~/.maradocs/config.json`. Alternatively, create a key by hand at `http://localhost:8787/dashboard/` under **API Keys** and run `maradocs auth login --server http://localhost:8787 --api-key mdo_...`.
+
+#### 3. Publish a report
 
 ```bash
 mkdir -p report
 printf '<h1>Hello from MaraDocs</h1>\n' > report/index.html
 
-maradocs repo create demo --access public
 maradocs publish ./report --repo demo --doc hello
 ```
-
-The report is available at `http://localhost:8787/r/demo/hello/`.
 
 ## Enable Agents
 
@@ -67,8 +83,8 @@ maradocs auth login --server https://docs.example.com --api-key mdo_...
 Then let the agent publish a static report folder through one of these paths without handling raw credentials in every agent prompt:
 
 - **Skill**: install the packaged MaraDocs skill with `npx skills add https://github.com/bnap00/maradocs --skill maradocs-publish` or your agent runtime's skills installer
-- **CLI**: `maradocs publish ./report --repo demo --doc hello`
-- **REST API**: upload a zip bundle to `/api/v1/repos/:repo/docs`
+- **CLI**: `maradocs publish ./report --repo demo --doc hello` (creates the repo on demand, versions on republish, and supports `--json` for machine-readable output)
+- **REST API**: upload a zip bundle to `/api/v1/repos/:repo/docs` — the full surface is described by the OpenAPI spec at `/api/v1/openapi.json`
 
 This works for agent systems that can run shell commands, call HTTP APIs, or use skills, including OpenClaw, Hermes, Claude Code, OpenCode, skills.sh-compatible agents, CI jobs, and custom runners.
 

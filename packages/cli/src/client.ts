@@ -22,9 +22,10 @@ export class MaraClient {
   constructor(private config: CliConfig) {}
 
   private headers(extra: Record<string, string> = {}): Record<string, string> {
-    const h: Record<string, string> = { ...extra };
+    const h: Record<string, string> = {};
     if (this.config.apiKey) h.authorization = `Bearer ${this.config.apiKey}`;
-    return h;
+    // Explicit per-request headers win (e.g. bootstrap's session token).
+    return { ...h, ...extra };
   }
 
   private async request<T>(
@@ -61,6 +62,22 @@ export class MaraClient {
 
   health(): Promise<{ status: string }> {
     return this.request("GET", "/health");
+  }
+
+  /** Exchange the dashboard admin password for a short-lived session token. */
+  adminLogin(password: string): Promise<{ token: string }> {
+    return this.request("POST", "/api/v1/auth/login", { json: { password } });
+  }
+
+  /** Mint a new API key using an admin session token. The key is shown once. */
+  createApiKey(
+    sessionToken: string,
+    input: { name: string; scopes?: string[] },
+  ): Promise<{ key: string; id: string; name: string; prefix: string; scopes: string[] }> {
+    return this.request("POST", "/api/v1/auth/keys", {
+      json: input,
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
   }
 
   listRepos(): Promise<{ repos: Repository[] }> {

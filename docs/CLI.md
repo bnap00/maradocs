@@ -16,7 +16,16 @@ npx @maradocs/cli --help
 
 ## Authenticate
 
-Create an API key in the dashboard first, then store it locally:
+The fastest path is `auth bootstrap`, which mints a new API key with the dashboard admin password and saves it locally — no dashboard visit needed:
+
+```bash
+maradocs auth bootstrap --server http://localhost:8787
+# Prompts for ADMIN_PASSWORD, creates a publish-scoped key, saves it.
+```
+
+Options: `--admin-password <pw>` (skip the prompt), `--name <name>`, `--scopes read,publish,admin`, `--no-save` (print the key without writing config), `--json`.
+
+If you already have an API key (created in the dashboard under **API Keys**), store it directly:
 
 ```bash
 maradocs auth login --server http://localhost:8787 --api-key mdo_...
@@ -74,6 +83,12 @@ Publish a folder containing `index.html` and any static assets:
 maradocs publish ./report --repo demo --doc hello
 ```
 
+Publishing is designed to just work for agents and scripts:
+
+- If the repository does not exist, it is created automatically (using `--access` if given). Disable with `--no-create-repo`.
+- If the document already exists, the publish becomes a new immutable version of it — no flag needed.
+- `--replace` forces PUT semantics: the publish fails unless the document already exists.
+
 Common options:
 
 ```bash
@@ -82,16 +97,21 @@ maradocs publish ./report \
   --doc hello \
   --title "Hello report" \
   --access private \
-  --entrypoint index.html
-```
-
-Use `--replace` to publish a new version of an existing document through PUT semantics:
-
-```bash
-maradocs publish ./report --repo demo --doc hello --replace
+  --entrypoint index.html \
+  --json
 ```
 
 Each successful publish creates a new immutable version. The document URL resolves to the latest version, while the version URL pins the exact publish.
+
+## Machine-Readable Output
+
+Every command that returns data supports `--json`: `publish`, `repo create|list|update`, `doc list|versions|rollback|delete`, `auth status`, `auth bootstrap`, and `open`. With `--json`, the JSON payload is the only thing written to stdout — progress messages go to stderr — so output can be piped straight into `jq` or parsed by an agent:
+
+```bash
+maradocs publish ./report --repo demo --doc hello --json | jq -r .url
+```
+
+Errors in `--json` mode are emitted to stderr as a single JSON object: `{"error": "<code>", "message": "...", "status": <http-status>}`.
 
 ## Manage Documents and Versions
 
