@@ -158,7 +158,17 @@ access="private" \
 bash packages/skill/skill/scripts/publish.sh
 ```
 
-Set `MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only to override saved CLI credentials.
+To update an existing artifact from the skill, download it first, edit, and republish:
+
+```bash
+repo="demo" doc="hello" out_dir="./report" \
+bash packages/skill/skill/scripts/download.sh
+# edit ./report ...
+report_path="./report" repo="demo" doc="hello" \
+bash packages/skill/skill/scripts/publish.sh
+```
+
+Both scripts print a single JSON object on stdout (progress goes to stderr), so agents can parse results directly. Set `MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only to override saved CLI credentials.
 
 See [CLI usage](CLI.md#agent-skill) for the current script options.
 

@@ -157,7 +157,7 @@ The server enforces path safety during extraction and serving. See [Security mod
 
 ## Agent Skill
 
-The `@maradocs/skill` package includes a `publish.sh` wrapper for agent runtimes:
+The `@maradocs/skill` package includes `publish.sh` and `download.sh` wrappers for agent runtimes:
 
 ```bash
 report_path="./report" \
@@ -165,6 +165,11 @@ repo="revenue" \
 doc="monthly-june-2026" \
 access="private" \
 bash packages/skill/skill/scripts/publish.sh
+
+repo="revenue" \
+doc="monthly-june-2026" \
+out_dir="./report" \
+bash packages/skill/skill/scripts/download.sh
 ```
 
-The skill reads `~/.maradocs/config.json` created by `maradocs auth login`. Set `MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only to override the saved CLI config. The skill creates the repository if needed, uploads a zip bundle, and prints the API JSON response. If the document already exists, it updates the document with a new immutable version.
+The skill reads `~/.maradocs/config.json` created by `maradocs auth login`. Set `MARADOCS_SERVER_URL` and `MARADOCS_API_KEY` only to override the saved CLI config. Publishing creates the repository if needed and becomes a new immutable version when the document already exists; downloading fetches a version's files (latest, or pinned with `version=N`) so an artifact can be edited and republished. Both scripts print exactly one JSON object on stdout, with progress on stderr.
