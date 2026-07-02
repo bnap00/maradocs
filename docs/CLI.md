@@ -105,7 +105,7 @@ Each successful publish creates a new immutable version. The document URL resolv
 
 ## Machine-Readable Output
 
-Every command that returns data supports `--json`: `publish`, `repo create|list|update`, `doc list|versions|rollback|delete`, `auth status`, `auth bootstrap`, and `open`. With `--json`, the JSON payload is the only thing written to stdout — progress messages go to stderr — so output can be piped straight into `jq` or parsed by an agent:
+Every command that returns data supports `--json`: `publish`, `repo create|list|update`, `doc list|versions|download|rollback|delete`, `auth status`, `auth bootstrap`, and `open`. With `--json`, the JSON payload is the only thing written to stdout — progress messages go to stderr — so output can be piped straight into `jq` or parsed by an agent:
 
 ```bash
 maradocs publish ./report --repo demo --doc hello --json | jq -r .url
@@ -124,6 +124,25 @@ maradocs open demo/hello
 ```
 
 Rollback promotes an existing immutable version to become the latest. It does not delete later versions.
+
+## Download and Update Documents
+
+`doc download` fetches a version's files so an artifact can be edited and republished:
+
+```bash
+maradocs doc download demo/hello            # extract latest into ./hello
+maradocs doc download demo/hello --out ./report
+maradocs doc download demo/hello -v 2       # pinned version
+maradocs doc download demo/hello --zip hello.zip  # keep the archive
+```
+
+Extraction refuses to overwrite a non-empty directory unless `--force` is given. The typical update loop:
+
+```bash
+maradocs doc download demo/hello --out ./report
+# edit ./report ...
+maradocs publish ./report --repo demo --doc hello   # becomes a new version
+```
 
 ## Folder Packaging Rules
 

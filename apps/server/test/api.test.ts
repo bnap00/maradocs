@@ -248,6 +248,46 @@ test("serves the published entrypoint and assets", async () => {
   assert.match(css.headers["content-type"] as string, /text\/css/);
 });
 
+test("downloads a version bundle as a zip", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/repos/demo/docs/hello/bundle",
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers["content-type"] as string, /application\/zip/);
+  assert.equal(res.headers["x-maradocs-version-number"], "1");
+  assert.ok(res.headers["x-maradocs-checksum"]);
+
+  const zip = new AdmZip(res.rawPayload);
+  const names = zip.getEntries().map((e) => e.entryName).sort();
+  assert.deepEqual(names, ["index.html", "style.css"]);
+  assert.equal(zip.readAsText("index.html"), "<h1>hi</h1>");
+
+  // Pinned version works the same way.
+  const pinned = await app.inject({
+    method: "GET",
+    url: "/api/v1/repos/demo/docs/hello/bundle?version=1",
+    headers: auth,
+  });
+  assert.equal(pinned.statusCode, 200);
+
+  // Unknown versions and unscoped keys are rejected.
+  const missing = await app.inject({
+    method: "GET",
+    url: "/api/v1/repos/demo/docs/hello/bundle?version=99",
+    headers: auth,
+  });
+  assert.equal(missing.statusCode, 404);
+
+  const unscoped = await app.inject({
+    method: "GET",
+    url: "/api/v1/repos/demo/docs/hello/bundle",
+    headers: unscopedAuth,
+  });
+  assert.equal(unscoped.statusCode, 403);
+});
+
 test("repository index escapes metadata and only lists public documents", async () => {
   await app.inject({
     method: "POST",

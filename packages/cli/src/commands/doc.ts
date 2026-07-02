@@ -1,6 +1,9 @@
 import { Command } from "commander";
+import fs from "node:fs";
+import path from "node:path";
 import { resolveConfig } from "../config.js";
 import { MaraClient } from "../client.js";
+import { extractZip } from "../zip.js";
 import { accessBadge, formatBytes, printJson, setJsonMode, ui } from "../output.js";
 import pc from "picocolors";
 
@@ -66,6 +69,73 @@ export function registerDoc(program: Command): void {
         ui.raw(`    ${pc.dim("by")} ${v.publishedByLabel ?? v.publishedByType}  ${pc.dim(v.checksum.slice(0, 16))}`);
       }
     });
+
+  doc
+    .command("download <target>")
+    .description("Download a document version's files (repo/doc)")
+    .option("-v, --version <n>", "Version number (default: latest)")
+    .option("-o, --out <dir>", "Directory to extract into (default: ./<doc>)")
+    .option("--zip <file>", "Save the raw zip archive instead of extracting")
+    .option("-f, --force", "Extract into a non-empty directory")
+    .option("--json", "Print the download result as JSON")
+    .action(
+      async (
+        target: string,
+        opts: { version?: string; out?: string; zip?: string; force?: boolean; json?: boolean },
+      ) => {
+        setJsonMode(Boolean(opts.json));
+        const { repo, doc: docSlug } = parseTarget(target);
+        const version = opts.version !== undefined ? Number(opts.version) : undefined;
+        ui.info(`Downloading ${pc.bold(`${repo}/${docSlug}`)}${version ? ` v${version}` : ""} …`);
+        const result = await client().downloadBundle(repo, docSlug, version);
+
+        if (opts.zip) {
+          fs.mkdirSync(path.dirname(path.resolve(opts.zip)), { recursive: true });
+          fs.writeFileSync(opts.zip, result.buffer);
+          if (opts.json) {
+            printJson({
+              repo,
+              doc: docSlug,
+              versionNumber: result.versionNumber,
+              checksum: result.checksum,
+              zip: path.resolve(opts.zip),
+            });
+            return;
+          }
+          ui.success(
+            `Saved ${repo}/${docSlug} v${result.versionNumber} to ${pc.bold(opts.zip)} ` +
+              `(${formatBytes(result.buffer.length)})`,
+          );
+          return;
+        }
+
+        const outDir = opts.out ?? `./${docSlug}`;
+        if (!opts.force && fs.existsSync(outDir) && fs.readdirSync(outDir).length > 0) {
+          throw new Error(
+            `Directory '${outDir}' is not empty. Use --force to extract anyway or --out <dir>.`,
+          );
+        }
+        const fileCount = extractZip(result.buffer, outDir);
+        if (opts.json) {
+          printJson({
+            repo,
+            doc: docSlug,
+            versionNumber: result.versionNumber,
+            checksum: result.checksum,
+            entrypoint: result.entrypoint,
+            fileCount,
+            out: path.resolve(outDir),
+          });
+          return;
+        }
+        ui.success(
+          `Downloaded ${repo}/${docSlug} v${result.versionNumber} ` +
+            `(${fileCount} files) to ${pc.bold(outDir)}`,
+        );
+        ui.kv("Checksum", (result.checksum ?? "").slice(0, 16));
+        ui.info(`Edit and republish with: maradocs publish ${outDir} --repo ${repo} --doc ${docSlug}`);
+      },
+    );
 
   doc
     .command("rollback <target>")

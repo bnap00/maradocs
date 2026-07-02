@@ -469,6 +469,49 @@ export const openapiSpec = {
         },
       },
     },
+    "/api/v1/repos/{repo}/docs/{doc}/bundle": {
+      get: {
+        summary: "Download a version's files as a zip bundle",
+        description:
+          "Returns the stored files of a version (latest when no version is given) so an artifact can be fetched, modified, and republished. Requires the 'read', 'publish', or 'admin' scope.",
+        parameters: [
+          { name: "repo", in: "path", required: true, schema: { type: "string" } },
+          { name: "doc", in: "path", required: true, schema: { type: "string" } },
+          {
+            name: "version",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1 },
+            description: "Pinned version number; defaults to the latest version",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Zip archive of the version's files",
+            headers: {
+              "x-maradocs-version-number": {
+                schema: { type: "string" },
+                description: "Version number contained in the bundle",
+              },
+              "x-maradocs-checksum": {
+                schema: { type: "string" },
+                description: "Checksum of the version (compare before republishing to detect concurrent updates)",
+              },
+              "x-maradocs-entrypoint": {
+                schema: { type: "string" },
+                description: "Entry HTML file of the version",
+              },
+            },
+            content: {
+              "application/zip": { schema: { type: "string", format: "binary" } },
+            },
+          },
+          "401": errorResponse("Missing or invalid API key"),
+          "403": errorResponse("Insufficient scope"),
+          "404": errorResponse("Repository, document, or version not found"),
+        },
+      },
+    },
     "/api/v1/repos/{repo}/docs/{doc}/versions": {
       get: {
         summary: "List versions of a document",

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import type {
   DocumentVersion,
   PublishDocInput,
@@ -174,6 +175,57 @@ export function listVersions(
   const doc = ctx.store.getDoc(repo.id, docSlug);
   if (!doc) throw notFound(`Document '${repoSlug}/${docSlug}' not found`);
   return ctx.store.listVersions(doc.id, doc.latestVersionId);
+}
+
+export interface VersionBundle {
+  versionNumber: number;
+  checksum: string;
+  entrypoint: string;
+  fileCount: number;
+  /** Absolute path of the extracted version tree on disk. */
+  dir: string;
+}
+
+/**
+ * Locate the on-disk tree for a document version (latest when no number is
+ * given) so it can be zipped and returned to the client.
+ */
+export function getVersionBundle(
+  ctx: AppContext,
+  repoSlug: string,
+  docSlug: string,
+  versionNumber?: number,
+): VersionBundle {
+  const repo = getRepoOr404(ctx, repoSlug);
+  const doc = ctx.store.getDoc(repo.id, docSlug);
+  if (!doc) throw notFound(`Document '${repoSlug}/${docSlug}' not found`);
+
+  const version =
+    versionNumber !== undefined
+      ? ctx.store.getVersionByNumber(doc.id, versionNumber)
+      : doc.latestVersionId
+        ? ctx.store.getVersionById(doc.latestVersionId)
+        : null;
+  if (!version) {
+    throw notFound(
+      versionNumber !== undefined
+        ? `Version ${versionNumber} of '${repoSlug}/${docSlug}' not found`
+        : `Document '${repoSlug}/${docSlug}' has no versions`,
+    );
+  }
+
+  const dir = ctx.storage.versionDir(repo.slug, doc.slug, version.version_number);
+  if (!fs.existsSync(dir)) {
+    throw notFound(`Stored files for version ${version.version_number} are missing`);
+  }
+
+  return {
+    versionNumber: version.version_number,
+    checksum: version.checksum,
+    entrypoint: version.entrypoint,
+    fileCount: version.file_count,
+    dir,
+  };
 }
 
 export function deleteDocument(

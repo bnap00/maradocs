@@ -60,6 +60,7 @@ The CLI wraps this flow as `maradocs auth bootstrap --server <url>`.
 | PUT | `/api/v1/repos/:repo/docs/:doc` | `publish` or `admin` | Replace an existing document with a new version |
 | DELETE | `/api/v1/repos/:repo/docs/:doc` | `publish` or `admin` | Delete a document and all versions |
 | GET | `/api/v1/repos/:repo/docs/:doc/versions` | any valid key | List document versions |
+| GET | `/api/v1/repos/:repo/docs/:doc/bundle` | `read`, `publish`, or `admin` | Download a version's files as a zip |
 | POST | `/api/v1/repos/:repo/docs/:doc/rollback` | `publish` or `admin` | Promote a previous version to latest |
 
 ## Publishing
@@ -105,6 +106,23 @@ Response shape:
   "checksum": "..."
 }
 ```
+
+## Downloading Bundles
+
+`GET /api/v1/repos/:repo/docs/:doc/bundle` returns a zip of a version's stored files — the latest version by default, or a pinned one with `?version=N`. This is the retrieval half of the update loop: download an artifact, modify it, republish it as a new version.
+
+```bash
+curl -sS -o report.zip "https://docs.example.com/api/v1/repos/demo/docs/hello/bundle" \
+  -H "Authorization: Bearer $MARADOCS_API_KEY"
+```
+
+Response headers carry version metadata:
+
+- `X-MaraDocs-Version-Number`: version contained in the bundle.
+- `X-MaraDocs-Checksum`: checksum of that version. Compare it against the latest version before republishing to detect a concurrent publish.
+- `X-MaraDocs-Entrypoint`: the version's entry HTML file.
+
+The CLI wraps this as `maradocs doc download <repo>/<doc>`.
 
 ## Read URLs
 

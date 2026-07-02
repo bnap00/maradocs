@@ -109,6 +109,16 @@ Republishing the same `--repo`/`--doc` automatically creates a new immutable ver
 
 All read commands support `--json` for machine-readable output (`repo list`, `doc list`, `doc versions`, `auth status`), so agents can inspect state without scraping formatted text.
 
+To update an existing artifact, download it first, edit the files, and republish — the publish becomes a new immutable version:
+
+```bash
+maradocs doc download demo/hello --out ./report --json
+# edit ./report ...
+maradocs publish ./report --repo demo --doc hello --json
+```
+
+The download's JSON result (and the `X-MaraDocs-Checksum` header on the REST endpoint) includes the version checksum; compare it against `doc versions` before republishing if concurrent publishes are possible.
+
 ## REST API Integration
 
 Use the REST API when the agent runtime can make HTTP requests but does not use the CLI.

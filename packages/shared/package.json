@@ -2,7 +2,6 @@
   "name": "@maradocs/shared",
   "version": "0.1.0",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,5 +21,24 @@
   },
   "devDependencies": {
     "typescript": "^5.7.2"
+  },
+  "description": "Shared schemas, types, and slug rules for MaraDocs packages.",
+  "author": "Bharat Parsiya",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bnap00/maradocs",
+    "directory": "packages/shared"
+  },
+  "homepage": "https://github.com/bnap00/maradocs#readme",
+  "keywords": [
+    "maradocs"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

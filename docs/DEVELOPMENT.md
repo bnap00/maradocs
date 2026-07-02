@@ -111,4 +111,4 @@ docker run --rm -p 8787:8787 \
 
 ## Release Notes
 
-The publish workflow releases `@maradocs/cli` and `@maradocs/skill` to npm on `v*` tags. Both package tarballs intentionally include only the package payload plus README and LICENSE files.
+The publish workflow releases `@maradocs/shared`, `@maradocs/cli`, `@maradocs/skill`, and `@maradocs/server` to npm on `v*` tags. The server package bundles the built dashboard into its `public/` directory so `npx @maradocs/server` serves the full app. All tarballs intentionally include only the package payload plus README and LICENSE files.

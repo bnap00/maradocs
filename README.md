@@ -22,13 +22,13 @@ maradocs publish ./report --repo demo --doc hello
 
 ### One-command setup (macOS / Linux)
 
-With Docker installed:
+With Docker **or** Node 22+ installed:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bnap00/maradocs/main/scripts/setup.sh | bash
 ```
 
-The script starts the server from the prebuilt `ghcr.io/bnap00/maradocs` image (in `~/maradocs`, on port 8787), generates an admin password and cookie secret, mints a publish-scoped API key, and configures the `maradocs` CLI if npm is available. Then publish your first report:
+The script starts the server (from the prebuilt `ghcr.io/bnap00/maradocs` image when Docker is available, otherwise standalone via `@maradocs/server` on Node), generates an admin password and cookie secret, mints a publish-scoped API key, and configures the `maradocs` CLI. Everything lives in `~/maradocs` on port 8787. Then publish your first report:
 
 ```bash
 mkdir -p report && printf '<h1>Hello from MaraDocs</h1>\n' > report/index.html
@@ -41,10 +41,19 @@ The report is available at `http://localhost:8787/r/demo/hello/`. Repositories a
 
 #### 1. Start the server
 
+With Docker:
+
 ```bash
 cp .env.example .env
 # Set COOKIE_SECRET (openssl rand -hex 32) and ADMIN_PASSWORD in .env.
 docker compose up -d --build
+```
+
+Without Docker (Node 22+):
+
+```bash
+npx @maradocs/server
+# First run creates ~/maradocs/data and prints a generated admin password.
 ```
 
 #### 2. Install and authenticate the CLI

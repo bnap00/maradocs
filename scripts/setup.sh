@@ -5,25 +5,27 @@
 #   curl -fsSL https://raw.githubusercontent.com/bnap00/maradocs/main/scripts/setup.sh | bash
 #
 # What it does:
-#   1. Verifies Docker (and Compose) are available.
-#   2. Creates an install directory (default ~/maradocs) with a
-#      docker-compose.yml and a .env containing generated secrets.
-#   3. Starts the server from the prebuilt ghcr.io/bnap00/maradocs image.
+#   1. Picks a runtime: Docker (preferred) or Node 22+ (no Docker needed).
+#   2. Creates an install directory (default ~/maradocs) with generated secrets.
+#   3. Starts the server (prebuilt ghcr.io/bnap00/maradocs image, or
+#      `npx @maradocs/server` standalone mode when running via Node).
 #   4. Mints a publish-scoped API key through the admin API.
 #   5. Configures the maradocs CLI if npm is available.
 #
 # Overridable via environment variables:
-#   MARADOCS_HOME    install directory        (default: ~/maradocs)
-#   MARADOCS_PORT    host port                (default: 8787)
-#   MARADOCS_IMAGE   docker image             (default: ghcr.io/bnap00/maradocs:latest)
+#   MARADOCS_HOME        install directory     (default: ~/maradocs)
+#   MARADOCS_PORT        host port             (default: 8787)
+#   MARADOCS_IMAGE       docker image          (default: ghcr.io/bnap00/maradocs:latest)
+#   MARADOCS_SETUP_MODE  auto | docker | node  (default: auto)
 #
-# The script is idempotent: re-running it reuses the existing .env and
-# skips steps that are already done.
+# The script is idempotent: re-running it reuses existing secrets and skips
+# steps that are already done.
 set -euo pipefail
 
 MARADOCS_HOME="${MARADOCS_HOME:-$HOME/maradocs}"
 MARADOCS_PORT="${MARADOCS_PORT:-8787}"
 MARADOCS_IMAGE="${MARADOCS_IMAGE:-ghcr.io/bnap00/maradocs:latest}"
+MARADOCS_SETUP_MODE="${MARADOCS_SETUP_MODE:-auto}"
 BASE_URL="http://localhost:${MARADOCS_PORT}"
 
 say()  { printf '\033[36m==>\033[0m %s\n' "$*"; }
@@ -45,55 +47,95 @@ random_hex() {
   fi
 }
 
-# --- 1. Prerequisites --------------------------------------------------------
+wait_for_health() {
+  say "Waiting for the server to become healthy …"
+  for _ in $(seq 1 60); do
+    if curl -fsS "${BASE_URL}/health" >/dev/null 2>&1; then
+      ok "Server is up at ${BASE_URL}"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+node_major() {
+  command -v node >/dev/null 2>&1 || { echo 0; return; }
+  node -e 'process.stdout.write(String(process.versions.node.split(".")[0]))' 2>/dev/null || echo 0
+}
+
+# --- 1. Pick a runtime -------------------------------------------------------
 command -v curl >/dev/null 2>&1 || die "curl is required."
 
-if ! command -v docker >/dev/null 2>&1; then
-  case "$(uname -s)" in
-    Darwin) die "Docker is required. Install Docker Desktop or OrbStack: https://docs.docker.com/desktop/setup/install/mac-install/" ;;
-    *)      die "Docker is required. Install it with: https://docs.docker.com/engine/install/" ;;
-  esac
-fi
-docker info >/dev/null 2>&1 || die "Docker is installed but the daemon is not running. Start Docker and re-run."
+MODE=""
+case "$MARADOCS_SETUP_MODE" in
+  docker) MODE="docker" ;;
+  node)   MODE="node" ;;
+  auto)
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+      MODE="docker"
+    elif [ "$(node_major)" -ge 22 ]; then
+      MODE="node"
+      say "Docker not available — using Node $(node --version) standalone mode."
+    fi
+    ;;
+  *) die "MARADOCS_SETUP_MODE must be auto, docker, or node." ;;
+esac
 
-if docker compose version >/dev/null 2>&1; then
-  COMPOSE="docker compose"
-elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE="docker-compose"
+if [ -z "$MODE" ]; then
+  warn "Neither Docker nor Node 22+ was found. Install one of:"
+  warn "  Docker:  https://docs.docker.com/get-started/get-docker/"
+  warn "  Node 22: https://nodejs.org/en/download"
+  die "No usable runtime."
+fi
+
+if [ "$MODE" = "docker" ]; then
+  command -v docker >/dev/null 2>&1 || die "Docker is required for MARADOCS_SETUP_MODE=docker."
+  docker info >/dev/null 2>&1 || die "Docker is installed but the daemon is not running. Start Docker and re-run."
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE="docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE="docker-compose"
+  else
+    die "Docker Compose is required (ships with Docker Desktop; on Linux install the docker-compose-plugin package)."
+  fi
+  ok "Using Docker ($COMPOSE)."
 else
-  die "Docker Compose is required (ships with Docker Desktop; on Linux install the docker-compose-plugin package)."
+  [ "$(node_major)" -ge 22 ] || die "Node 22+ is required for MARADOCS_SETUP_MODE=node (found $(node --version 2>/dev/null || echo none))."
+  command -v npm >/dev/null 2>&1 || die "npm is required alongside Node."
+  ok "Using Node $(node --version) (standalone, no Docker)."
 fi
-ok "Docker and Compose found."
 
-# --- 2. Install directory, .env, compose file --------------------------------
 mkdir -p "$MARADOCS_HOME"
 cd "$MARADOCS_HOME"
 
+# --- 2. Start the server -----------------------------------------------------
+ADMIN_PASSWORD=""
 NEW_INSTALL=0
-if [ -f .env ]; then
-  say "Reusing existing $MARADOCS_HOME/.env"
-else
-  NEW_INSTALL=1
-  say "Generating secrets in $MARADOCS_HOME/.env"
-  COOKIE_SECRET="$(random_hex 32)"
-  ADMIN_PASSWORD="$(random_hex 12)"
-  umask 077
-  cat > .env <<EOF
+
+start_docker() {
+  if [ -f .env ]; then
+    say "Reusing existing $MARADOCS_HOME/.env"
+  else
+    NEW_INSTALL=1
+    say "Generating secrets in $MARADOCS_HOME/.env"
+    umask 077
+    cat > .env <<EOF
 # Generated by the MaraDocs setup script on $(date -u +%Y-%m-%dT%H:%M:%SZ).
 PUBLIC_BASE_URL=${BASE_URL}
-COOKIE_SECRET=${COOKIE_SECRET}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
+COOKIE_SECRET=$(random_hex 32)
+ADMIN_PASSWORD=$(random_hex 12)
 DEFAULT_REPO_ACCESS=private
 MAX_UPLOAD_MB=50
 EOF
-  umask 022
-fi
-ADMIN_PASSWORD="$(sed -nE 's/^ADMIN_PASSWORD=(.*)$/\1/p' .env | head -n 1)"
-[ -n "$ADMIN_PASSWORD" ] || die "ADMIN_PASSWORD missing from $MARADOCS_HOME/.env"
+    umask 022
+  fi
+  ADMIN_PASSWORD="$(sed -nE 's/^ADMIN_PASSWORD=(.*)$/\1/p' .env | head -n 1)"
+  [ -n "$ADMIN_PASSWORD" ] || die "ADMIN_PASSWORD missing from $MARADOCS_HOME/.env"
 
-if [ ! -f docker-compose.yml ]; then
-  say "Writing $MARADOCS_HOME/docker-compose.yml"
-  cat > docker-compose.yml <<EOF
+  if [ ! -f docker-compose.yml ]; then
+    say "Writing $MARADOCS_HOME/docker-compose.yml"
+    cat > docker-compose.yml <<EOF
 services:
   maradocs:
     image: ${MARADOCS_IMAGE}
@@ -119,44 +161,76 @@ services:
       timeout: 5s
       retries: 3
 EOF
-fi
+  fi
 
-# --- 3. Start the server -----------------------------------------------------
-say "Pulling ${MARADOCS_IMAGE} …"
-if ! $COMPOSE pull --quiet 2>/dev/null && ! $COMPOSE pull; then
-  warn "Could not pull ${MARADOCS_IMAGE}."
-  warn "To build from source instead:"
-  warn "  git clone https://github.com/bnap00/maradocs && cd maradocs"
-  warn "  cp .env.example .env  # set COOKIE_SECRET and ADMIN_PASSWORD"
-  warn "  docker compose up -d --build"
-  die "Image pull failed."
-fi
+  say "Pulling ${MARADOCS_IMAGE} …"
+  if ! $COMPOSE pull --quiet 2>/dev/null && ! $COMPOSE pull; then
+    warn "Could not pull ${MARADOCS_IMAGE}."
+    warn "To build from source instead:"
+    warn "  git clone https://github.com/bnap00/maradocs && cd maradocs"
+    warn "  cp .env.example .env  # set COOKIE_SECRET and ADMIN_PASSWORD"
+    warn "  docker compose up -d --build"
+    die "Image pull failed."
+  fi
 
-say "Starting MaraDocs on ${BASE_URL} …"
-$COMPOSE up -d
+  say "Starting MaraDocs on ${BASE_URL} …"
+  $COMPOSE up -d
+  wait_for_health || die "Server did not become healthy. Check: cd $MARADOCS_HOME && $COMPOSE logs"
+  MANAGE_HINT="cd ${MARADOCS_HOME} && ${COMPOSE} logs|stop|down"
+}
 
-say "Waiting for the server to become healthy …"
-healthy=0
-for _ in $(seq 1 60); do
-  if curl -fsS "${BASE_URL}/health" >/dev/null 2>&1; then healthy=1; break; fi
-  sleep 1
-done
-[ "$healthy" = 1 ] || die "Server did not become healthy. Check: cd $MARADOCS_HOME && $COMPOSE logs"
-ok "Server is up at ${BASE_URL}"
+start_node() {
+  export DATA_DIR="$MARADOCS_HOME/data"
+  [ -f "$DATA_DIR/standalone-secrets.json" ] || NEW_INSTALL=1
 
-# --- 4. Mint an API key ------------------------------------------------------
+  if curl -fsS "${BASE_URL}/health" >/dev/null 2>&1; then
+    say "A server is already responding on ${BASE_URL} — skipping start."
+  else
+    SERVER_BIN=""
+    if command -v maradocs-server >/dev/null 2>&1; then
+      SERVER_BIN="$(command -v maradocs-server)"
+    else
+      say "Installing @maradocs/server (npm install -g) …"
+      if npm install -g @maradocs/server >/dev/null 2>&1; then
+        SERVER_BIN="$(command -v maradocs-server || true)"
+      fi
+      if [ -z "$SERVER_BIN" ]; then
+        warn "Global npm install failed (permissions?) — installing into ${MARADOCS_HOME}/server instead."
+        mkdir -p "$MARADOCS_HOME/server"
+        ( cd "$MARADOCS_HOME/server" && npm install --no-fund --no-audit @maradocs/server >/dev/null )
+        SERVER_BIN="$MARADOCS_HOME/server/node_modules/.bin/maradocs-server"
+      fi
+    fi
+    [ -x "$SERVER_BIN" ] || die "Could not install @maradocs/server."
+
+    say "Starting MaraDocs standalone on ${BASE_URL} …"
+    PORT="$MARADOCS_PORT" DATA_DIR="$DATA_DIR" nohup "$SERVER_BIN" > "$MARADOCS_HOME/server.log" 2>&1 &
+    echo $! > "$MARADOCS_HOME/server.pid"
+  fi
+
+  wait_for_health || die "Server did not become healthy. Check: $MARADOCS_HOME/server.log"
+  ADMIN_PASSWORD="$(json_value adminPassword < "$DATA_DIR/standalone-secrets.json" 2>/dev/null || true)"
+  [ -n "$ADMIN_PASSWORD" ] || warn "Could not read the admin password from $DATA_DIR/standalone-secrets.json."
+  MANAGE_HINT="kill \$(cat ${MARADOCS_HOME}/server.pid)  # stop; re-run this script to start again. Logs: ${MARADOCS_HOME}/server.log"
+  RESTART_NOTE="The standalone server does not restart on reboot. Re-run this script after a reboot, or add maradocs-server to systemd/launchd."
+}
+
+RESTART_NOTE=""
+if [ "$MODE" = "docker" ]; then start_docker; else start_node; fi
+
+# --- 3. Mint an API key ------------------------------------------------------
 API_KEY=""
 CLI_CONFIG="$HOME/.maradocs/config.json"
 if [ -f "$CLI_CONFIG" ] && grep -q "\"server\": \"${BASE_URL}\"" "$CLI_CONFIG" 2>/dev/null; then
   say "CLI already configured for ${BASE_URL} — skipping API key bootstrap."
-else
+elif [ -n "$ADMIN_PASSWORD" ]; then
   say "Creating a publish-scoped API key …"
   login_response="$(curl -fsS -X POST "${BASE_URL}/api/v1/auth/login" \
     -H 'content-type: application/json' \
     -d "{\"password\":\"${ADMIN_PASSWORD}\"}" 2>/dev/null || true)"
   token="$(printf '%s' "$login_response" | json_value token)"
   if [ -z "$token" ]; then
-    warn "Could not log in with the admin password from .env (wrong password or rate-limited)."
+    warn "Could not log in with the stored admin password (wrong password or rate-limited)."
     warn "Create a key manually at ${BASE_URL}/dashboard/ under API Keys."
   else
     key_response="$(curl -fsS -X POST "${BASE_URL}/api/v1/auth/keys" \
@@ -168,7 +242,7 @@ else
   fi
 fi
 
-# --- 5. Configure the CLI ----------------------------------------------------
+# --- 4. Configure the CLI ----------------------------------------------------
 CLI_READY=0
 if [ -n "$API_KEY" ]; then
   if ! command -v maradocs >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
@@ -185,14 +259,17 @@ elif [ -f "$CLI_CONFIG" ]; then
   CLI_READY=1
 fi
 
-# --- 6. Summary ---------------------------------------------------------------
+# --- 5. Summary ---------------------------------------------------------------
 echo
 say "MaraDocs is ready."
 echo "  Dashboard:      ${BASE_URL}/dashboard/"
-if [ "$NEW_INSTALL" = 1 ]; then
-  echo "  Admin password: ${ADMIN_PASSWORD}   (stored in ${MARADOCS_HOME}/.env)"
+if [ "$NEW_INSTALL" = 1 ] && [ -n "$ADMIN_PASSWORD" ]; then
+  echo "  Admin password: ${ADMIN_PASSWORD}"
+fi
+if [ "$MODE" = "docker" ]; then
+  echo "  Admin password stored in: ${MARADOCS_HOME}/.env"
 else
-  echo "  Admin password: see ${MARADOCS_HOME}/.env"
+  echo "  Admin password stored in: ${MARADOCS_HOME}/data/standalone-secrets.json"
 fi
 if [ -n "$API_KEY" ] && [ "$CLI_READY" = 0 ]; then
   echo "  API key:        ${API_KEY}   (shown once — store it securely)"
@@ -211,4 +288,8 @@ else
 fi
 echo
 echo "  Manage the server:"
-echo "    cd ${MARADOCS_HOME} && ${COMPOSE} logs|stop|down"
+echo "    ${MANAGE_HINT}"
+if [ -n "$RESTART_NOTE" ]; then
+  echo
+  warn "$RESTART_NOTE"
+fi
