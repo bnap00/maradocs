@@ -15,6 +15,9 @@ export default defineConfig([
       globals: globals.node,
     },
     rules: {
+      // TypeScript itself checks undefined identifiers; the ESLint rule only
+      // produces false positives on ambient types (per typescript-eslint FAQ).
+      "no-undef": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },

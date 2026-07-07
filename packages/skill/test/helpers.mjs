@@ -22,6 +22,8 @@ export function runScript(script, env) {
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
+    // Settle on spawn failure too (e.g. bash missing) instead of hanging.
+    child.on("error", (err) => resolve({ code: -1, stdout, stderr: stderr + String(err) }));
     child.on("close", (code) => resolve({ code, stdout, stderr }));
   });
 }

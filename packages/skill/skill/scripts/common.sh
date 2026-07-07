@@ -35,8 +35,11 @@ json_value() {
 # Escape a string for embedding inside a JSON double-quoted field.
 json_str() {
   local v="$1"
-  v="${v//\\/\\\\}" # \ -> \\
-  v="${v//\"/\\\"}" # " -> \"
+  v="${v//\\/\\\\}"   # \ -> \\
+  v="${v//\"/\\\"}"   # " -> \"
+  v="${v//$'\n'/\\n}" # newline -> \n
+  v="${v//$'\r'/\\r}" # CR -> \r
+  v="${v//$'\t'/\\t}" # tab -> \t
   printf '%s' "$v"
 }
 

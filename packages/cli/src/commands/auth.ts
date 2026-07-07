@@ -7,8 +7,10 @@ import { MaraClient } from "../client.js";
 import { printJson, setJsonMode, ui } from "../output.js";
 
 async function promptSecret(question: string): Promise<string> {
+  // Prompts go to stderr so stdout stays clean for --json consumers.
+  const prompt = process.stderr;
   if (!input.isTTY || !output.isTTY) {
-    const rl = createInterface({ input, output });
+    const rl = createInterface({ input, output: prompt });
     try {
       return (await rl.question(question)).trim();
     } finally {
@@ -30,13 +32,13 @@ async function promptSecret(question: string): Promise<string> {
       for (const char of chunk.toString("utf8")) {
         if (char === "\u0003" || char === "\u0004") {
           cleanup();
-          output.write("\n");
+          prompt.write("\n");
           reject(new Error("Cancelled."));
           return;
         }
         if (char === "\r" || char === "\n") {
           cleanup();
-          output.write("\n");
+          prompt.write("\n");
           resolve(value.trim());
           return;
         }
@@ -48,7 +50,7 @@ async function promptSecret(question: string): Promise<string> {
       }
     };
 
-    output.write(question);
+    prompt.write(question);
     input.setRawMode(true);
     input.resume();
     input.on("data", onData);

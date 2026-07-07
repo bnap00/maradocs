@@ -28,6 +28,12 @@ export class MaraClient {
     return { ...h, ...extra };
   }
 
+  /** Abort signal so requests fail fast instead of hanging on a dead server. */
+  private timeoutSignal(): AbortSignal {
+    const seconds = Number(process.env.MARADOCS_TIMEOUT ?? 120);
+    return AbortSignal.timeout((Number.isFinite(seconds) && seconds > 0 ? seconds : 120) * 1000);
+  }
+
   private async request<T>(
     method: string,
     pathname: string,
@@ -41,7 +47,12 @@ export class MaraClient {
     }
     let res: Response;
     try {
-      res = await fetch(`${this.config.server}${pathname}`, { method, headers, body });
+      res = await fetch(`${this.config.server}${pathname}`, {
+        method,
+        headers,
+        body,
+        signal: this.timeoutSignal(),
+      });
     } catch (err) {
       throw new ApiError(
         0,
@@ -125,7 +136,10 @@ export class MaraClient {
     const pathname = `/api/v1/repos/${repo}/docs/${doc}/bundle${qs}`;
     let res: Response;
     try {
-      res = await fetch(`${this.config.server}${pathname}`, { headers: this.headers() });
+      res = await fetch(`${this.config.server}${pathname}`, {
+        headers: this.headers(),
+        signal: this.timeoutSignal(),
+      });
     } catch (err) {
       throw new ApiError(
         0,

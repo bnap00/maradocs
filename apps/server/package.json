@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"fs.chmodSync('dist/standalone.js', 0o755)\"",
     "dev": "tsx watch --ignore ../../.maradocs-data --ignore ../../data src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",

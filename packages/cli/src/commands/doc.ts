@@ -85,7 +85,13 @@ export function registerDoc(program: Command): void {
       ) => {
         setJsonMode(Boolean(opts.json));
         const { repo, doc: docSlug } = parseTarget(target);
-        const version = opts.version !== undefined ? Number(opts.version) : undefined;
+        let version: number | undefined;
+        if (opts.version !== undefined) {
+          version = Number(opts.version);
+          if (!Number.isInteger(version) || version < 1) {
+            throw new Error(`--version must be a positive integer, got '${opts.version}'`);
+          }
+        }
         ui.info(`Downloading ${pc.bold(`${repo}/${docSlug}`)}${version ? ` v${version}` : ""} …`);
         const result = await client().downloadBundle(repo, docSlug, version);
 

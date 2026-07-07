@@ -236,9 +236,14 @@ elif [ -n "$ADMIN_PASSWORD" ]; then
     key_response="$(curl -fsS -X POST "${BASE_URL}/api/v1/auth/keys" \
       -H "authorization: Bearer ${token}" \
       -H 'content-type: application/json' \
-      -d '{"name":"setup-script","scopes":["publish"]}')"
+      -d '{"name":"setup-script","scopes":["publish"]}' 2>/dev/null || true)"
     API_KEY="$(printf '%s' "$key_response" | json_value key)"
-    [ -n "$API_KEY" ] && ok "API key created."
+    if [ -n "$API_KEY" ]; then
+      ok "API key created."
+    else
+      warn "Could not create an API key automatically."
+      warn "Create a key manually at ${BASE_URL}/dashboard/ under API Keys."
+    fi
   fi
 fi
 
@@ -255,7 +260,8 @@ if [ -n "$API_KEY" ]; then
     CLI_READY=1
     ok "CLI authenticated (credentials in ~/.maradocs/config.json)."
   fi
-elif [ -f "$CLI_CONFIG" ]; then
+elif [ -f "$CLI_CONFIG" ] && grep -q "\"server\": \"${BASE_URL}\"" "$CLI_CONFIG" 2>/dev/null; then
+  # Only trust an existing config that actually targets this server.
   CLI_READY=1
 fi
 

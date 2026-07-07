@@ -69,8 +69,9 @@ if (changed) {
 console.log(`MaraDocs standalone`);
 console.log(`  Dashboard: ${process.env.PUBLIC_BASE_URL}/dashboard/`);
 if (passwordGenerated) {
-  console.log(`  Admin password: ${secrets.adminPassword}`);
-  console.log(`  (persisted in ${secretsPath})`);
+  // Never print the password itself: stdout ends up in process-manager and
+  // container logs. Point at the 0600 secrets file instead.
+  console.log(`  Admin password: generated — see ${secretsPath}`);
 } else if (!passwordFromEnv) {
   console.log(`  Admin password: stored in ${secretsPath}`);
 }
