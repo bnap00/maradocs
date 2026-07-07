@@ -4,11 +4,13 @@ import { stdin as input, stdout as output } from "node:process";
 import { ApiError } from "../client.js";
 import { clearConfig, configPath, loadConfig, saveConfig } from "../config.js";
 import { MaraClient } from "../client.js";
-import { ui } from "../output.js";
+import { printJson, setJsonMode, ui } from "../output.js";
 
 async function promptSecret(question: string): Promise<string> {
+  // Prompts go to stderr so stdout stays clean for --json consumers.
+  const prompt = process.stderr;
   if (!input.isTTY || !output.isTTY) {
-    const rl = createInterface({ input, output });
+    const rl = createInterface({ input, output: prompt });
     try {
       return (await rl.question(question)).trim();
     } finally {
@@ -30,13 +32,13 @@ async function promptSecret(question: string): Promise<string> {
       for (const char of chunk.toString("utf8")) {
         if (char === "\u0003" || char === "\u0004") {
           cleanup();
-          output.write("\n");
+          prompt.write("\n");
           reject(new Error("Cancelled."));
           return;
         }
         if (char === "\r" || char === "\n") {
           cleanup();
-          output.write("\n");
+          prompt.write("\n");
           resolve(value.trim());
           return;
         }
@@ -48,7 +50,7 @@ async function promptSecret(question: string): Promise<string> {
       }
     };
 
-    output.write(question);
+    prompt.write(question);
     input.setRawMode(true);
     input.resume();
     input.on("data", onData);
@@ -128,6 +130,55 @@ export function registerAuth(program: Command): void {
     });
 
   auth
+    .command("bootstrap")
+    .description("Mint a new API key with the admin password and save it locally")
+    .requiredOption("-s, --server <url>", "MaraDocs server base URL")
+    .option("--admin-password <password>", "Dashboard admin password (prompted if omitted)")
+    .option("-n, --name <name>", "Display name for the new API key", "cli-bootstrap")
+    .option("--scopes <scopes>", "Comma-separated scopes: read,publish,admin", "publish")
+    .option("--no-save", "Print the key without writing ~/.maradocs/config.json")
+    .option("--json", "Print the result as JSON")
+    .action(
+      async (opts: {
+        server: string;
+        adminPassword?: string;
+        name: string;
+        scopes: string;
+        save: boolean;
+        json?: boolean;
+      }) => {
+        setJsonMode(Boolean(opts.json));
+        const server = opts.server.replace(/\/$/, "");
+        const adminPassword = opts.adminPassword ?? (await promptSecret("Admin password: "));
+        if (!adminPassword) throw new Error("Admin password is required.");
+
+        const client = new MaraClient({ server, apiKey: null });
+        const { token } = await client.adminLogin(adminPassword);
+        const scopes = opts.scopes
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const created = await client.createApiKey(token, { name: opts.name, scopes });
+
+        if (opts.save) {
+          saveConfig({ server, apiKey: created.key });
+        }
+        if (opts.json) {
+          printJson({ server, saved: opts.save, ...created });
+          return;
+        }
+        if (opts.save) {
+          ui.success(`Saved credentials to ${configPath()}`);
+        }
+        ui.kv("Server", server);
+        ui.kv("Key name", created.name);
+        ui.kv("Scopes", created.scopes.join(", "));
+        ui.kv("API key", created.key);
+        ui.warn("The API key is shown once. Store it securely.");
+      },
+    );
+
+  auth
     .command("logout")
     .description("Remove stored credentials")
     .action(() => {
@@ -138,19 +189,39 @@ export function registerAuth(program: Command): void {
   auth
     .command("status")
     .description("Show current authentication status")
-    .action(async () => {
+    .option("--json", "Print the status as JSON")
+    .action(async (opts: { json?: boolean }) => {
+      setJsonMode(Boolean(opts.json));
       const cfg = loadConfig();
       if (!cfg) {
+        if (opts.json) {
+          printJson({ loggedIn: false });
+          return;
+        }
         ui.warn("Not logged in.");
+        return;
+      }
+      let reachable = false;
+      let reachError: string | null = null;
+      try {
+        await new MaraClient(cfg).health();
+        reachable = true;
+      } catch (err) {
+        reachError = (err as Error).message;
+      }
+      if (opts.json) {
+        printJson({
+          loggedIn: true,
+          server: cfg.server,
+          apiKey: cfg.apiKey ? "set" : "none",
+          serverReachable: reachable,
+          ...(reachError ? { error: reachError } : {}),
+        });
         return;
       }
       ui.kv("Server", cfg.server);
       ui.kv("API key", cfg.apiKey ? "set" : "none");
-      try {
-        await new MaraClient(cfg).health();
-        ui.success("Server reachable.");
-      } catch (err) {
-        ui.error(`Server unreachable: ${(err as Error).message}`);
-      }
+      if (reachable) ui.success("Server reachable.");
+      else ui.error(`Server unreachable: ${reachError}`);
     });
 }

@@ -36,6 +36,17 @@ export function requireScope(scope: string) {
   };
 }
 
+/** Pass when the key has any of the given scopes ("admin" always passes). */
+export function requireAnyScope(...scopes: string[]) {
+  return async (req: FastifyRequest) => {
+    const m = req.machine;
+    if (!m) throw unauthorized();
+    if (!m.scopes.includes("admin") && !scopes.some((s) => m.scopes.includes(s))) {
+      throw forbidden(`API key missing required scope: one of ${scopes.join(", ")}`);
+    }
+  };
+}
+
 export function requireUser(ctx: AppContext) {
   return async (req: FastifyRequest) => {
     const token = bearer(req);

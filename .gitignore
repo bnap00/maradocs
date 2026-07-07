@@ -9,6 +9,9 @@ build/
 coverage/
 *.tsbuildinfo
 
+# Dashboard build bundled into the server package at publish time
+apps/server/public/
+
 # MaraDocs runtime data
 maradocs-data/
 data/

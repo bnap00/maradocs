@@ -2,7 +2,7 @@ import { Command } from "commander";
 import type { AccessMode } from "@maradocs/shared";
 import { resolveConfig } from "../config.js";
 import { MaraClient } from "../client.js";
-import { accessBadge, ui } from "../output.js";
+import { accessBadge, printJson, setJsonMode, ui } from "../output.js";
 
 function client(): MaraClient {
   return new MaraClient(resolveConfig());
@@ -19,7 +19,9 @@ export function registerRepo(program: Command): void {
     .option("-d, --description <text>", "Description")
     .option("-p, --password <password>", "Password (for password access)")
     .option("--index", "Enable the public repository index")
+    .option("--json", "Print the created repository as JSON")
     .action(async (slug: string, opts: Record<string, string | boolean>) => {
+      setJsonMode(Boolean(opts.json));
       const { repo: created } = await client().createRepo({
         slug,
         access: opts.access as AccessMode | undefined,
@@ -28,6 +30,10 @@ export function registerRepo(program: Command): void {
         password: opts.password as string | undefined,
         indexEnabled: Boolean(opts.index),
       });
+      if (opts.json) {
+        printJson(created);
+        return;
+      }
       ui.success(`Created repository ${created.slug} (${accessBadge(created.defaultAccess)})`);
     });
 
@@ -35,8 +41,14 @@ export function registerRepo(program: Command): void {
     .command("list")
     .alias("ls")
     .description("List repositories")
-    .action(async () => {
+    .option("--json", "Print repositories as JSON")
+    .action(async (opts: { json?: boolean }) => {
+      setJsonMode(Boolean(opts.json));
       const { repos } = await client().listRepos();
+      if (opts.json) {
+        printJson(repos);
+        return;
+      }
       if (repos.length === 0) {
         ui.info("No repositories yet. Create one with `maradocs repo create <slug>`.");
         return;
@@ -58,7 +70,9 @@ export function registerRepo(program: Command): void {
     .option("--clear-password", "Remove the password")
     .option("--index", "Enable the public repository index")
     .option("--no-index", "Disable the public repository index")
+    .option("--json", "Print the updated repository as JSON")
     .action(async (slug: string, opts: Record<string, unknown>) => {
+      setJsonMode(Boolean(opts.json));
       const { repo: updated } = await client().updateRepo(slug, {
         access: opts.access as AccessMode | undefined,
         name: opts.name as string | undefined,
@@ -66,6 +80,10 @@ export function registerRepo(program: Command): void {
         password: opts.clearPassword ? null : (opts.password as string | undefined),
         indexEnabled: opts.index as boolean | undefined,
       });
+      if (opts.json) {
+        printJson(updated);
+        return;
+      }
       ui.success(`Updated repository ${updated.slug} (${accessBadge(updated.defaultAccess)})`);
     });
 }

@@ -4,14 +4,72 @@ MaraDocs ships as a single Docker container: a Fastify API, a static file
 server, the SQLite metadata store, and the password-protected dashboard, all
 backed by a mounted `/data` volume.
 
-## Quick start (Docker Compose)
+## One-command setup (macOS / Linux)
+
+For a personal machine or single host, the setup script does everything —
+generates secrets, starts the server, mints an API key, and configures the
+CLI:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bnap00/maradocs/main/scripts/setup.sh | bash
+```
+
+It prefers Docker (prebuilt `ghcr.io/bnap00/maradocs:latest` image) and
+falls back to Node 22+ standalone mode when Docker is not installed. It
+installs into `~/maradocs` (override with `MARADOCS_HOME`), listens on
+port 8787 (`MARADOCS_PORT`), and re-running it is safe: existing secrets
+and data are reused. Force a runtime with `MARADOCS_SETUP_MODE=docker` or
+`MARADOCS_SETUP_MODE=node`.
+
+## Run without Docker
+
+The server is a single Node process backed by SQLite — Docker is optional.
+With Node 22+:
+
+```bash
+npx @maradocs/server
+```
+
+Standalone mode picks personal-machine defaults: data in `~/maradocs/data`,
+a cookie secret and admin password generated on first run and persisted
+(mode 0600) in `~/maradocs/data/standalone-secrets.json`, and the server
+bound to `127.0.0.1:8787`. Explicit environment variables (`PORT`, `HOST`,
+`DATA_DIR`, `PUBLIC_BASE_URL`, `ADMIN_PASSWORD`, `COOKIE_SECRET`) override
+every default.
+
+To expose it beyond the local machine, set `HOST=0.0.0.0` and
+`PUBLIC_BASE_URL` to the external URL — and put TLS in front (see the
+reverse-proxy section below).
+
+Standalone mode does not manage the process: it runs in the foreground and
+does not restart on reboot. For an always-on install, either use Docker
+(`restart: unless-stopped` is built in) or wrap `maradocs-server` in a
+systemd unit / launchd agent.
+
+## Prebuilt image
+
+Every push to `main` and every `v*` tag publishes a multi-arch
+(amd64 + arm64) image to GitHub Container Registry:
+
+```text
+ghcr.io/bnap00/maradocs:latest    # tracks main
+ghcr.io/bnap00/maradocs:<version> # tagged releases
+```
+
+Use it anywhere you'd otherwise build from the Dockerfile.
+
+## Quick start (Docker Compose, from source)
 
 ```bash
 cp .env.example .env
-# edit .env: set COOKIE_SECRET and ADMIN_PASSWORD
+# edit .env: set COOKIE_SECRET (openssl rand -hex 32) and ADMIN_PASSWORD
 docker compose up -d --build
 # open http://localhost:8787/dashboard/
 ```
+
+`.env.example` ships with `COOKIE_SECRET` and `ADMIN_PASSWORD` empty on
+purpose: `docker compose up` fails with a clear message until you set real
+values, and the server refuses known placeholder values in production.
 
 The `./maradocs-data` directory is mounted at `/data` and holds `docs.db`
 plus the `repositories/` bundle tree.

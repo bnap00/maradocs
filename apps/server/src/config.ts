@@ -8,6 +8,12 @@ function accessEnv(value: string | undefined, fallback: AccessMode): AccessMode 
   return fallback;
 }
 
+const PLACEHOLDER_VALUES = new Set([
+  "change-me-to-a-long-random-string",
+  "change-me-before-exposing-to-internet",
+  "maradocs-insecure-dev-cookie-secret-change-me",
+]);
+
 function resolveDataDir(env: NodeJS.ProcessEnv): string {
   const configured = env.DATA_DIR ?? DEFAULTS.DATA_DIR;
   if (path.isAbsolute(configured)) return configured;
@@ -46,6 +52,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const bcryptRounds = Number(env.BCRYPT_ROUNDS ?? 12);
 
   if (isProduction) {
+    // Values that shipped as .env.example placeholders in earlier releases.
+    // They satisfy the length checks but are publicly known, so refuse them.
+    if (PLACEHOLDER_VALUES.has(adminPassword)) {
+      throw new Error(
+        "ADMIN_PASSWORD is still the .env.example placeholder — set a real password before starting in production",
+      );
+    }
+    if (PLACEHOLDER_VALUES.has(cookieSecret)) {
+      throw new Error(
+        "COOKIE_SECRET is still the .env.example placeholder — generate one with `openssl rand -hex 32`",
+      );
+    }
     if (cookieSecret.length < 32) {
       throw new Error("COOKIE_SECRET must be set to at least 32 characters in production");
     }

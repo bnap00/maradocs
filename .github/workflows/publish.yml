@@ -32,8 +32,22 @@ jobs:
       - name: Build CLI
         run: pnpm --filter ./packages/cli build
 
+      - name: Build dashboard
+        run: pnpm --filter @maradocs/dashboard build
+
+      - name: Build server (dashboard bundled into package)
+        run: |
+          pnpm --filter @maradocs/server build
+          mkdir -p apps/server/public/dashboard
+          cp -r apps/dashboard/dist/* apps/server/public/dashboard/
+
       - name: Validate skill bundle
         run: node packages/skill/scripts/check.mjs
+
+      - name: Publish shared (@maradocs/shared)
+        run: pnpm --filter @maradocs/shared publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish CLI (@maradocs/cli)
         run: pnpm --filter ./packages/cli publish --provenance
@@ -42,5 +56,10 @@ jobs:
 
       - name: Publish skill (@maradocs/skill)
         run: pnpm --filter @maradocs/skill publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish server (@maradocs/server)
+        run: pnpm --filter @maradocs/server publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

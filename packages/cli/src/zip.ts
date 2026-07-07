@@ -40,3 +40,27 @@ export function zipFolder(folder: string): { buffer: Buffer; fileCount: number }
 export function hasEntrypoint(folder: string, entrypoint = "index.html"): boolean {
   return fs.existsSync(path.join(path.resolve(folder), entrypoint));
 }
+
+/**
+ * Extract a zip buffer into a directory, refusing entries that would escape
+ * it (absolute paths, `..` segments — zip-slip). Returns the file count.
+ */
+export function extractZip(buffer: Buffer, outDir: string): number {
+  const root = path.resolve(outDir);
+  fs.mkdirSync(root, { recursive: true });
+  const zip = new AdmZip(buffer);
+  let fileCount = 0;
+
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) continue;
+    const name = entry.entryName.replace(/\\/g, "/");
+    const target = path.resolve(root, name);
+    if (path.isAbsolute(name) || (target !== root && !target.startsWith(root + path.sep))) {
+      throw new Error(`Refusing to extract unsafe path: ${entry.entryName}`);
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, entry.getData());
+    fileCount += 1;
+  }
+  return fileCount;
+}

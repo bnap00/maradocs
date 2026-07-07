@@ -25,7 +25,7 @@ export async function dashboardApiRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/me", async (req) => ({ user: req.user }));
 
-  app.get("/repos", async (req) => ({
+  app.get("/repos", async () => ({
     repos: listRepos(ctx),
   }));
 

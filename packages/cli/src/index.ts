@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { ApiError } from "./client.js";
-import { ui } from "./output.js";
+import { isJsonMode, ui } from "./output.js";
 import { registerAuth } from "./commands/auth.js";
 import { registerRepo } from "./commands/repo.js";
 import { registerPublish } from "./commands/publish.js";
@@ -11,15 +11,10 @@ const program = new Command();
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
 
-if (process.argv.length === 3 && ["--version", "-V"].includes(process.argv[2]!)) {
-  ui.raw(VERSION);
-  process.exit(0);
-}
-
 program
   .name("maradocs")
   .description("Publish static HTML reports to a MaraDocs server and get durable URLs.")
-  .version(VERSION, "--cli-version", "display CLI version");
+  .version(VERSION, "-V, --version", "display CLI version");
 
 registerAuth(program);
 registerRepo(program);
@@ -31,7 +26,13 @@ async function main(): Promise<void> {
   try {
     await program.parseAsync(process.argv);
   } catch (err) {
-    if (err instanceof ApiError) {
+    if (isJsonMode()) {
+      const payload =
+        err instanceof ApiError
+          ? { error: err.code, message: err.message, status: err.status }
+          : { error: "error", message: (err as Error).message };
+      console.error(JSON.stringify(payload));
+    } else if (err instanceof ApiError) {
       ui.error(`${err.message}${err.status ? ` (${err.status})` : ""}`);
     } else {
       ui.error((err as Error).message);

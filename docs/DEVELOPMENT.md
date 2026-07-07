@@ -49,7 +49,7 @@ What each command covers:
 | Command | Coverage |
 |---------|----------|
 | `pnpm typecheck` | TypeScript across workspace packages |
-| `pnpm lint` | Dashboard ESLint rules |
+| `pnpm lint` | ESLint for server, CLI, shared, and scripts (root `eslint.config.js`) plus the dashboard's own config |
 | `pnpm test` | Server integration and unit tests with real SQLite |
 | `pnpm build` | Shared package, CLI bundle, skill validation, server, dashboard |
 | `pnpm e2e:smoke` | Built server + built CLI publish flow against temporary data |
@@ -111,4 +111,4 @@ docker run --rm -p 8787:8787 \
 
 ## Release Notes
 
-The publish workflow releases `@maradocs/cli` and `@maradocs/skill` to npm on `v*` tags. Both package tarballs intentionally include only the package payload plus README and LICENSE files.
+The publish workflow releases `@maradocs/shared`, `@maradocs/cli`, `@maradocs/skill`, and `@maradocs/server` to npm on `v*` tags. The server package bundles the built dashboard into its `public/` directory so `npx @maradocs/server` serves the full app. All tarballs intentionally include only the package payload plus README and LICENSE files.

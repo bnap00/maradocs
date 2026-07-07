@@ -2,11 +2,10 @@
   "name": "@maradocs/server",
   "version": "0.1.0",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"fs.chmodSync('dist/standalone.js', 0o755)\"",
     "dev": "tsx watch --ignore ../../.maradocs-data --ignore ../../data src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -23,7 +22,8 @@
     "fastify-plugin": "^5.0.1",
     "pino-pretty": "^13.0.0",
     "yauzl": "^3.2.0",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "adm-zip": "^0.5.17"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
@@ -31,8 +31,41 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "@types/yauzl": "^2.10.3",
-    "adm-zip": "^0.5.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "description": "Self-hosted MaraDocs server: publish static HTML reports from agents/CLI/CI and serve them at durable, access-controlled URLs.",
+  "author": "Bharat Parsiya",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bnap00/maradocs",
+    "directory": "apps/server"
+  },
+  "homepage": "https://github.com/bnap00/maradocs#readme",
+  "keywords": [
+    "maradocs",
+    "server",
+    "publish",
+    "reports",
+    "agents",
+    "ai",
+    "html",
+    "static",
+    "self-hosted"
+  ],
+  "bin": {
+    "maradocs-server": "./dist/standalone.js"
+  },
+  "files": [
+    "dist",
+    "public",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

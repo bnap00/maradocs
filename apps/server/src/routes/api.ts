@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import AdmZip from "adm-zip";
+import { z } from "zod";
 import {
   createRepoSchema,
   publishDocSchema,
@@ -7,7 +9,7 @@ import {
 } from "@maradocs/shared";
 import { badRequest } from "../util/errors.js";
 import { parseUpload } from "../util/multipart.js";
-import { requireMachine, requireScope } from "../auth/middleware.js";
+import { requireAnyScope, requireMachine, requireScope } from "../auth/middleware.js";
 import {
   createRepo,
   listDocs,
@@ -16,6 +18,7 @@ import {
 } from "../services/repoService.js";
 import {
   deleteDocument,
+  getVersionBundle,
   listVersions,
   publishDocument,
   rollbackDocument,
@@ -27,7 +30,7 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   const ctx = app.ctx;
   app.addHook("preHandler", requireMachine(ctx));
 
-  app.get("/repos", async (req) => ({
+  app.get("/repos", async () => ({
     repos: listRepos(ctx),
   }));
 
@@ -105,6 +108,34 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     async (req) => ({
       versions: listVersions(ctx, req.params.repo, req.params.doc),
     }),
+  );
+
+  // Download a version's files as a zip bundle (latest when no ?version=).
+  // Lets agents pull an artifact, modify it, and republish a new version.
+  app.get<{ Params: { repo: string; doc: string }; Querystring: { version?: string } }>(
+    "/repos/:repo/docs/:doc/bundle",
+    { preHandler: requireAnyScope("read", "publish") },
+    async (req, reply) => {
+      const { version } = z
+        .object({ version: z.coerce.number().int().positive().optional() })
+        .parse(req.query);
+      const bundle = getVersionBundle(ctx, req.params.repo, req.params.doc, version);
+
+      const zip = new AdmZip();
+      zip.addLocalFolder(bundle.dir);
+      const buffer = await zip.toBufferPromise();
+
+      reply
+        .type("application/zip")
+        .header(
+          "content-disposition",
+          `attachment; filename="${req.params.repo}-${req.params.doc}-v${bundle.versionNumber}.zip"`,
+        )
+        .header("x-maradocs-version-number", String(bundle.versionNumber))
+        .header("x-maradocs-checksum", bundle.checksum)
+        .header("x-maradocs-entrypoint", bundle.entrypoint);
+      return reply.send(buffer);
+    },
   );
 
   app.post<{ Params: { repo: string; doc: string } }>(
