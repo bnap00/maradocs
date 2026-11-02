@@ -1,0 +1,6 @@
+# Gitleaks false positives: test fixtures, not real credentials.
+# Format: <commit>:<file>:<rule>:<line> (history scans) or <file>:<rule>:<line> (staged/dir scans).
+55f2d4d2241a9427c30287258cf8a5b0a4dc6c75:apps/server/test/local-auth.test.ts:generic-api-key:37
+55f2d4d2241a9427c30287258cf8a5b0a4dc6c75:scripts/e2e-smoke.mjs:generic-api-key:27
+apps/server/test/local-auth.test.ts:generic-api-key:37
+scripts/e2e-smoke.mjs:generic-api-key:27

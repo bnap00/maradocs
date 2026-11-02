@@ -152,6 +152,18 @@ pnpm build
 pnpm e2e:smoke
 ```
 
+Secret scanning runs before each commit via a [Gitleaks](https://github.com/gitleaks/gitleaks)
+[pre-commit](https://pre-commit.com) hook. Enable it once per clone:
+
+```bash
+pipx install pre-commit   # or: brew install pre-commit
+pre-commit install
+```
+
+## Security
+
+Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
