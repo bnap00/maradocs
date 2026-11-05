@@ -35,3 +35,25 @@ test("rejects BCRYPT_ROUNDS < 10 in production", () => {
     /BCRYPT_ROUNDS/,
   );
 });
+
+test("TRUST_PROXY: production trusts private-network proxies by default", () => {
+  const prod = {
+    NODE_ENV: "production",
+    COOKIE_SECRET: "x".repeat(32),
+    PUBLIC_BASE_URL: "https://example.com",
+    ADMIN_PASSWORD: "test-password",
+  };
+  assert.equal(
+    loadConfig(prod as NodeJS.ProcessEnv).trustProxy,
+    "loopback,linklocal,uniquelocal",
+  );
+  assert.equal(
+    loadConfig({ ...prod, TRUST_PROXY: "10.0.0.5" } as NodeJS.ProcessEnv).trustProxy,
+    "10.0.0.5",
+  );
+  assert.equal(loadConfig({ ...prod, TRUST_PROXY: "false" } as NodeJS.ProcessEnv).trustProxy, false);
+  assert.equal(
+    loadConfig({ ADMIN_PASSWORD: "test-password" } as NodeJS.ProcessEnv).trustProxy,
+    false,
+  );
+});

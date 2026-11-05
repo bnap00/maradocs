@@ -17,6 +17,10 @@ on:
       - master
   workflow_dispatch:
 
+# Only calls an outbound webhook; no repository access needed.
+permissions:
+  contents: read
+
 jobs:
   trigger-dokploy:
     runs-on: ubuntu-latest

@@ -15,6 +15,7 @@ git clone https://github.com/bnap00/maradocs
 cd maradocs
 pnpm install
 cp .env.example .env   # fill in ADMIN_PASSWORD + COOKIE_SECRET
+pre-commit install     # Gitleaks secret scan on every commit (pipx install pre-commit)
 ```
 
 ## Running locally
@@ -80,4 +81,6 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-GitHub Actions publishes `@maradocs/cli` and `@maradocs/skill` to npm automatically.
+GitHub Actions publishes `@maradocs/shared`, `@maradocs/cli`, `@maradocs/skill` and
+`@maradocs/server` to npm via [trusted publishing](https://docs.npmjs.com/trusted-publishers)
+(OIDC, with provenance) — no npm token is stored in the repo.

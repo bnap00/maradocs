@@ -5,24 +5,40 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
+# Publishes via npm trusted publishing (OIDC): no long-lived npm token, and
+# provenance is attached automatically. Each package must have this repo +
+# workflow (publish.yml) registered as a Trusted Publisher on npmjs.com.
+# NPM_TOKEN is only a fallback for packages that are not on npm yet (trusted
+# publishers can only be added to existing packages); delete the secret once
+# every package is configured.
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write # npm OIDC trusted publishing + provenance
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: 10.33.0
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      # Node 24 bundles npm >= 11.5.1, which trusted publishing requires
+      # (pnpm publish hands the tarball to npm). No dependency cache in the
+      # release job, to rule out cache poisoning.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
-          cache: pnpm
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Check npm supports trusted publishing
+        run: |
+          npm --version
+          node -e "const [a,b,c]=process.argv[1].split('.').map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$(npm --version)"
 
       - run: pnpm install --frozen-lockfile
 
@@ -44,22 +60,24 @@ jobs:
       - name: Validate skill bundle
         run: node packages/skill/scripts/check.mjs
 
+      # --no-git-checks: tag pushes check out a detached HEAD, which pnpm's
+      # "must be on main" publish check would otherwise reject.
       - name: Publish shared (@maradocs/shared)
-        run: pnpm --filter @maradocs/shared publish --provenance
+        run: pnpm --filter @maradocs/shared publish --provenance --no-git-checks
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # fallback only; OIDC is tried first
 
       - name: Publish CLI (@maradocs/cli)
-        run: pnpm --filter ./packages/cli publish --provenance
+        run: pnpm --filter ./packages/cli publish --provenance --no-git-checks
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # fallback only; OIDC is tried first
 
       - name: Publish skill (@maradocs/skill)
-        run: pnpm --filter @maradocs/skill publish --provenance
+        run: pnpm --filter @maradocs/skill publish --provenance --no-git-checks
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # fallback only; OIDC is tried first
 
       - name: Publish server (@maradocs/server)
-        run: pnpm --filter @maradocs/server publish --provenance
+        run: pnpm --filter @maradocs/server publish --provenance --no-git-checks
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # fallback only; OIDC is tried first

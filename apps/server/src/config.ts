@@ -33,6 +33,8 @@ export interface ServerConfig {
   adminPassword: string;
   bcryptRounds: number;
   dashboardDevServerUrl: string | null;
+  /** Fastify `trustProxy`: which peers may set X-Forwarded-* (false = none). */
+  trustProxy: string | false;
   isProduction: boolean;
 }
 
@@ -90,8 +92,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     dashboardDevServerUrl: isProduction
       ? null
       : (env.DASHBOARD_DEV_SERVER_URL ?? "http://localhost:5273").replace(/\/$/, ""),
+    trustProxy: trustProxyEnv(env.TRUST_PROXY, isProduction),
     isProduction,
   };
+}
+
+/**
+ * Production default trusts reverse proxies on loopback or private networks
+ * (same host / Docker network, e.g. Dokploy's Traefik). Fastify no longer
+ * honours hop counts, since those let direct clients spoof X-Forwarded-For.
+ */
+function trustProxyEnv(value: string | undefined, isProduction: boolean): string | false {
+  const trimmed = value?.trim();
+  if (!trimmed) return isProduction ? "loopback,linklocal,uniquelocal" : false;
+  if (trimmed === "false" || trimmed === "0") return false;
+  return trimmed;
 }
 
 export type { AccessMode };

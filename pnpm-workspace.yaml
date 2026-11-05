@@ -1,3 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Supply-chain cooldown: don't resolve package versions published less than
+# 3 days (4320 minutes) ago. Dependabot uses the same cooldown.
+minimumReleaseAge: 4320

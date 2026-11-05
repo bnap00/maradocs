@@ -38,7 +38,7 @@ export async function buildApp(config: ServerConfig): Promise<BuiltApp> {
           : { target: "pino-pretty", options: { translateTime: "HH:MM:ss", ignore: "pid,hostname" } },
     },
     bodyLimit: config.maxUploadBytes + 1024 * 1024,
-    trustProxy: config.isProduction ? 1 : false,
+    trustProxy: config.trustProxy,
   });
 
   app.decorate("ctx", ctx);

@@ -125,6 +125,12 @@ docs.example.com {
 
 When using a reverse proxy, keep `PUBLIC_BASE_URL` set to the public HTTPS origin, not the internal container address.
 
+Client IPs (used for rate limiting) come from `X-Forwarded-For` only when the
+connecting peer is a trusted proxy. In production MaraDocs trusts loopback and
+private-network peers by default (`TRUST_PROXY=loopback,linklocal,uniquelocal`),
+which covers a proxy on the same host or Docker network. If your proxy reaches
+the container from a public address, set `TRUST_PROXY` to its IP/CIDR.
+
 ## Backups
 
 Back up the whole mounted data directory:
