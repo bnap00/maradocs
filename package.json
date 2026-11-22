@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
-  "description": "MaraDocs — a Docker-first publishing system that lets agents ship static HTML reports through a CLI or REST API, then return durable URLs with controlled access.",
+  "description": "MaraDocs \u2014 a Docker-first publishing system that lets agents ship static HTML reports through a CLI or REST API, then return durable URLs with controlled access.",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -40,6 +40,9 @@
       "better-sqlite3",
       "workerd",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "minimatch@<11.0.1": "^11.0.9"
+    }
   }
 }
