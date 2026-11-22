@@ -26,8 +26,14 @@ export function loadConfig(): CliConfig | null {
 }
 
 export function saveConfig(config: CliConfig): void {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+  // `mode` only applies when the file is created: tighten an existing file too.
+  try {
+    fs.chmodSync(CONFIG_FILE, 0o600);
+  } catch {
+    /* best effort (e.g. filesystems without POSIX modes) */
+  }
 }
 
 export function clearConfig(): void {

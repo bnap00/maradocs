@@ -7,11 +7,20 @@ import AdmZip from "adm-zip";
 import type { FastifyInstance } from "fastify";
 import { loadConfig } from "../src/config.js";
 import { buildApp } from "../src/app.js";
+import {
+  createKey,
+  login,
+  makeApp,
+  multipart,
+  register,
+  sha256hex,
+  type TestApp,
+} from "./helpers.js";
 
+let t: TestApp;
 let app: FastifyInstance;
-let dataDir: string;
-const TOKEN = "test-bypass-token";
-const UNSCOPED_TOKEN = "test-unscoped-token";
+let auth: { authorization: string };
+let unscopedAuth: { authorization: string };
 
 function bundle(): Buffer {
   const zip = new AdmZip();
@@ -83,69 +92,27 @@ function crc32(data: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/** Build a multipart/form-data body (light-my-request can't encode web FormData). */
-function multipart(fields: Record<string, string>, file: Buffer) {
-  const boundary = `----maradocstest${Math.random().toString(16).slice(2)}`;
-  const parts: Buffer[] = [];
-  for (const [k, v] of Object.entries(fields)) {
-    parts.push(
-      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`),
-    );
-  }
-  parts.push(
-    Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="bundle.zip"\r\nContent-Type: application/zip\r\n\r\n`,
-    ),
-  );
-  parts.push(file);
-  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-  return {
-    body: Buffer.concat(parts),
-    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
-  };
-}
-
 before(async () => {
-  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maradocs-test-"));
-  const config = loadConfig({
-    NODE_ENV: "development",
-    DATA_DIR: dataDir,
-    PORT: "0",
-    ADMIN_PASSWORD: "test-password",
-    BCRYPT_ROUNDS: "4",
-    NO_PRETTY_LOG: "1",
-  } as NodeJS.ProcessEnv);
-  const built = await buildApp(config);
-  built.ctx.auth.verifyApiKey = async (secret) => {
-    if (secret === UNSCOPED_TOKEN) {
-      return {
-        type: "machine",
-        apiKeyId: "test_unscoped_api_key",
-        name: "Test unscoped API key",
-        scopes: [],
-        subject: null,
-      };
-    }
-    if (secret !== TOKEN) return null;
-    return {
-      type: "machine",
-      apiKeyId: "test_api_key",
-      name: "Test API key",
-      scopes: ["publish", "admin"],
-      subject: null,
-    };
-  };
-  app = built.app;
-  await app.ready();
+  t = await makeApp();
+  app = t.app;
+  const owner = await register(app, "owner@example.com");
+  auth = (await createKey(app, owner, ["publish", "admin"])).auth;
+  // Keys can't be created without scopes through the API; insert one directly.
+  const unscopedKey = "mdo_test-unscoped-key";
+  t.ctx.store.createApiKey({
+    userId: owner.id,
+    name: "Test unscoped API key",
+    keyHash: sha256hex(unscopedKey),
+    prefix: unscopedKey.slice(0, 12),
+    scopes: [],
+  });
+  unscopedAuth = { authorization: `Bearer ${unscopedKey}` };
 });
 
 after(async () => {
-  await app.close();
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  await t.close();
 });
 
-const auth = { authorization: `Bearer ${TOKEN}` };
-const unscopedAuth = { authorization: `Bearer ${UNSCOPED_TOKEN}` };
 
 test("health is ok", async () => {
   const res = await app.inject({ method: "GET", url: "/health" });
@@ -164,7 +131,6 @@ test("rejects dashboard access without a valid session", async () => {
     loadConfig({
       NODE_ENV: "development",
       DATA_DIR: dir,
-      ADMIN_PASSWORD: "test-password",
       BCRYPT_ROUNDS: "4",
       NO_PRETTY_LOG: "1",
     }),
@@ -183,13 +149,13 @@ test("rejects dashboard access without a valid session", async () => {
   }
 });
 
-test("requires production cookie secret and public base URL", () => {
+test("validates a configured production cookie secret and requires public base URL", () => {
   assert.throws(
     () =>
       loadConfig({
         NODE_ENV: "production",
         COOKIE_SECRET: "short",
-        ADMIN_PASSWORD: "test-password",
+        PUBLIC_BASE_URL: "https://example.com",
       }),
     /COOKIE_SECRET/,
   );
@@ -198,10 +164,13 @@ test("requires production cookie secret and public base URL", () => {
       loadConfig({
         NODE_ENV: "production",
         COOKIE_SECRET: "x".repeat(32),
-        ADMIN_PASSWORD: "test-password",
       }),
     /PUBLIC_BASE_URL/,
   );
+  // Neither COOKIE_SECRET nor ADMIN_PASSWORD is required any more.
+  const config = loadConfig({ NODE_ENV: "production", PUBLIC_BASE_URL: "https://example.com" });
+  assert.equal(config.cookieSecret, null);
+  assert.equal(config.adminPassword, null);
 });
 
 test("creates a repo and publishes a document", async () => {
@@ -375,7 +344,7 @@ test("blocks path traversal", async () => {
   assert.equal(res.statusCode, 404);
 });
 
-test("private documents require a session", async () => {
+test("private documents require the owner's session or key", async () => {
   await app.inject({
     method: "POST",
     url: "/api/v1/repos",
@@ -393,20 +362,20 @@ test("private documents require a session", async () => {
   const anon = await app.inject({ method: "GET", url: "/r/secret/topsecret/" });
   assert.equal(anon.statusCode, 401);
 
-  const login = await app.inject({
+  const signIn = await app.inject({
     method: "POST",
     url: "/api/v1/auth/login",
-    payload: { password: "test-password" },
+    payload: { email: "owner@example.com", password: "correct-horse-battery" },
   });
-  assert.equal(login.statusCode, 200);
-  const setCookie = login.headers["set-cookie"];
+  assert.equal(signIn.statusCode, 200);
+  const setCookie = signIn.headers["set-cookie"];
   assert.ok(setCookie);
   const sessionCookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
 
   const authed = await app.inject({
     method: "GET",
     url: "/r/secret/topsecret/",
-    headers: { cookie: sessionCookie.split(";")[0] },
+    headers: { cookie: sessionCookie!.split(";")[0] },
   });
   assert.equal(authed.statusCode, 200);
   assert.match(authed.body, /<h1>hi<\/h1>/);
@@ -418,6 +387,13 @@ test("private documents require a session", async () => {
   });
   assert.equal(machine.statusCode, 200);
   assert.match(machine.body, /<h1>hi<\/h1>/);
+
+  const bearerSession = await app.inject({
+    method: "GET",
+    url: "/r/secret/topsecret/",
+    headers: { authorization: `Bearer ${await login(app, "owner@example.com")}` },
+  });
+  assert.equal(bearerSession.statusCode, 200);
 });
 
 test("password documents unlock from the browser form", async () => {
@@ -453,7 +429,7 @@ test("password documents unlock from the browser form", async () => {
   const unlocked = await app.inject({
     method: "GET",
     url: "/r/passworded/protected/",
-    headers: { cookie: cookieHeader.split(";")[0] },
+    headers: { cookie: cookieHeader!.split(";")[0] },
   });
   assert.equal(unlocked.statusCode, 200);
   assert.match(unlocked.body, /<h1>hi<\/h1>/);

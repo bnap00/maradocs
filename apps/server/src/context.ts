@@ -8,14 +8,14 @@ export interface AppContext {
   store: Store;
   storage: Storage;
   auth: LocalAuth;
+  /** Resolved secret for signing cookies (COOKIE_SECRET or the generated, persisted one). */
+  cookieSecret: string;
 }
 
 declare module "fastify" {
   interface FastifyRequest {
     machine?: MachineIdentity;
     user?: UserIdentity;
-    /** Raw bearer token extracted by requireUser; used by logout to hash and delete the session. */
-    sessionToken?: string;
   }
   interface FastifyInstance {
     ctx: AppContext;

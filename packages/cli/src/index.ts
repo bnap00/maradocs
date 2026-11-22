@@ -14,6 +14,10 @@ const VERSION = __VERSION__;
 program
   .name("maradocs")
   .description("Publish static HTML reports to a MaraDocs server and get durable URLs.")
+  // Program options are only parsed before the subcommand name, so the
+  // subcommands' own `-v, --version <n>` (doc download/rollback) isn't
+  // swallowed by the program-level `--version`.
+  .enablePositionalOptions()
   .version(VERSION, "-V, --version", "display CLI version");
 
 registerAuth(program);

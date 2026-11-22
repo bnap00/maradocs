@@ -1,0 +1,227 @@
+/* Design tokens. One neutral ramp + one accent, semantic colours for access
+   modes and feedback. Dark mode follows the system unless the user picks a
+   theme (html[data-theme]). */
+
+:root {
+  color-scheme: light;
+
+  /* Type */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --leading-tight: 1.25;
+  --leading: 1.5;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing (4px grid) */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Layout */
+  --sidebar-w: 248px;
+  --topbar-h: 56px;
+  --content-max: 1180px;
+  --control-h: 36px;
+  --control-h-sm: 30px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 260ms;
+
+  /* Neutrals (light) */
+  --bg: #fbfbfc;
+  --surface: #ffffff;
+  --surface-2: #f6f6f8;
+  --surface-3: #eeeef1;
+  --surface-hover: #f3f3f6;
+  --border: #e5e5ea;
+  --border-strong: #d4d4db;
+  /* Borders that identify a control (inputs, checkboxes, radios, the off
+     switch track) need 3:1 against the page (WCAG 1.4.11). */
+  --control-border: #8b8b96;
+  --text: #17171a;
+  --text-2: #4f4f58;
+  --text-3: #6b6b75; /* >= 4.5:1 on bg, surface-2 and surface-3 */
+  --text-inverse: #ffffff;
+
+  /* Accent */
+  --accent: #5b5bd6;
+  --accent-hover: #4d4dc6;
+  --accent-active: #4343b4;
+  --accent-soft: rgba(91, 91, 214, 0.09);
+  --accent-soft-2: rgba(91, 91, 214, 0.16);
+  --accent-text: #4545c0;
+  /* Filled buttons: white text needs >= 4.5:1 in both themes. */
+  --accent-solid: #5b5bd6;
+  --accent-solid-hover: #4d4dc6;
+  --accent-solid-active: #4343b4;
+  /* Keyboard focus is drawn as an outline (it survives component box-shadows
+     and forced-colors mode); opaque so it keeps >= 3:1 on every surface. */
+  --focus-color: #5b5bd6;
+
+  /* Semantic */
+  --success: #1a7f50;
+  --success-bg: #ebf8f0;
+  --success-border: #bfe6cf;
+  --warning: #9a5600;
+  --warning-bg: #fff5e3;
+  --warning-border: #f5d9a8;
+  --danger: #cd2b31;
+  --danger-hover: #b5232a;
+  --danger-solid: #cd2b31;
+  --danger-solid-hover: #b5232a;
+  --danger-bg: #fff0f0;
+  --danger-border: #f6c6c7;
+  --info: #3d4a5c;
+  --info-bg: #eff2f6;
+  --info-border: #d5dce6;
+
+  /* Access modes map onto semantics */
+  --access-public: var(--success);
+  --access-public-bg: var(--success-bg);
+  --access-public-border: var(--success-border);
+  --access-password: var(--warning);
+  --access-password-bg: var(--warning-bg);
+  --access-password-border: var(--warning-border);
+  --access-private: var(--info);
+  --access-private-bg: var(--info-bg);
+  --access-private-border: var(--info-border);
+
+  /* Elevation */
+  --shadow-xs: 0 1px 1px rgba(16, 16, 24, 0.04);
+  --shadow-sm: 0 1px 2px rgba(16, 16, 24, 0.06), 0 1px 1px rgba(16, 16, 24, 0.03);
+  --shadow-md: 0 4px 12px -2px rgba(16, 16, 24, 0.08), 0 2px 4px -2px rgba(16, 16, 24, 0.05);
+  --shadow-lg: 0 16px 40px -8px rgba(16, 16, 24, 0.18), 0 4px 12px -4px rgba(16, 16, 24, 0.08);
+  --overlay: rgba(18, 18, 24, 0.38);
+
+  --skeleton: #ececf0;
+  --skeleton-hi: #f6f6f8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e0f11;
+    --surface: #151619;
+    --surface-2: #1a1b1f;
+    --surface-3: #222328;
+    --surface-hover: #1e1f24;
+    --border: #26272d;
+    --border-strong: #34363d;
+    --control-border: #6b6d76;
+    --text: #ececef;
+    --text-2: #b2b2ba;
+    --text-3: #8d8d97;
+    --text-inverse: #0e0f11;
+    --accent: #7272ea;
+    --accent-hover: #8181f0;
+    --accent-active: #9090f5;
+    --accent-soft: rgba(114, 114, 234, 0.13);
+    --accent-soft-2: rgba(114, 114, 234, 0.22);
+    --accent-text: #a3a3ff;
+    --accent-solid: #5b5bd6;
+    --accent-solid-hover: #6262de;
+    --accent-solid-active: #5151cc;
+    --focus-color: #9090f5;
+    --success: #4cc38a;
+    --success-bg: rgba(76, 195, 138, 0.1);
+    --success-border: rgba(76, 195, 138, 0.28);
+    --warning: #f0a83a;
+    --warning-bg: rgba(240, 168, 58, 0.1);
+    --warning-border: rgba(240, 168, 58, 0.28);
+    --danger: #ff6b70;
+    --danger-hover: #ff8589;
+    --danger-solid: #d33a3f;
+    --danger-solid-hover: #c9353a;
+    --danger-bg: rgba(255, 107, 112, 0.1);
+    --danger-border: rgba(255, 107, 112, 0.3);
+    --info: #a7b3c5;
+    --info-bg: rgba(167, 179, 197, 0.1);
+    --info-border: rgba(167, 179, 197, 0.26);
+    --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 20px 48px -8px rgba(0, 0, 0, 0.65), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --skeleton: #1d1e22;
+    --skeleton-hi: #26272c;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e0f11;
+  --surface: #151619;
+  --surface-2: #1a1b1f;
+  --surface-3: #222328;
+  --surface-hover: #1e1f24;
+  --border: #26272d;
+  --border-strong: #34363d;
+  --control-border: #6b6d76;
+  --text: #ececef;
+  --text-2: #b2b2ba;
+  --text-3: #8d8d97;
+  --text-inverse: #0e0f11;
+  --accent: #7272ea;
+  --accent-hover: #8181f0;
+  --accent-active: #9090f5;
+  --accent-soft: rgba(114, 114, 234, 0.13);
+  --accent-soft-2: rgba(114, 114, 234, 0.22);
+  --accent-text: #a3a3ff;
+  --accent-solid: #5b5bd6;
+  --accent-solid-hover: #6262de;
+  --accent-solid-active: #5151cc;
+  --focus-color: #9090f5;
+  --success: #4cc38a;
+  --success-bg: rgba(76, 195, 138, 0.1);
+  --success-border: rgba(76, 195, 138, 0.28);
+  --warning: #f0a83a;
+  --warning-bg: rgba(240, 168, 58, 0.1);
+  --warning-border: rgba(240, 168, 58, 0.28);
+  --danger: #ff6b70;
+  --danger-hover: #ff8589;
+  --danger-solid: #d33a3f;
+  --danger-solid-hover: #c9353a;
+  --danger-bg: rgba(255, 107, 112, 0.1);
+  --danger-border: rgba(255, 107, 112, 0.3);
+  --info: #a7b3c5;
+  --info-bg: rgba(167, 179, 197, 0.1);
+  --info-border: rgba(167, 179, 197, 0.26);
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 48px -8px rgba(0, 0, 0, 0.65), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --skeleton: #1d1e22;
+  --skeleton-hi: #26272c;
+}

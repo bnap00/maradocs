@@ -24,6 +24,7 @@
     "build": "node scripts/build.mjs",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test ./test/*.test.mjs",
     "start": "node dist/index.js"
   },
   "devDependencies": {

@@ -84,35 +84,85 @@ export class ApiError extends Error {
   }
 }
 
-export type TokenGetter = () => Promise<string | null>;
+export interface User {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface AuthConfig {
+  /** Whether creating an account is currently allowed. */
+  registration: boolean;
+  /** Whether the first account must present the server's claim password. */
+  claimRequired: boolean;
+  /** No account exists yet. */
+  firstAccount?: boolean;
+  minPasswordLength: number;
+}
 
 const DASH = "/api/v1/dashboard";
 const AUTH = "/api/v1/auth";
 
-export function createApi(getToken: TokenGetter, onUnauthorized?: () => void) {
+/**
+ * Cookie-only transport: the session lives in the httpOnly `maradocs_session`
+ * cookie, never in JS. Every request sends `x-maradocs: 1`, which the server
+ * requires on cookie-authenticated writes (CSRF defence).
+ */
+async function send<T>(method: string, url: string, body?: unknown): Promise<{ status: number; data: T }> {
+  const headers: Record<string, string> = { "x-maradocs": "1" };
+  if (body !== undefined) headers["content-type"] = "application/json";
+  const res = await fetch(url, {
+    method,
+    headers,
+    credentials: "same-origin",
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let data: unknown = null;
+  try { if (text) data = JSON.parse(text); } catch { /* non-JSON body — treat as empty */ }
+  if (!res.ok) {
+    throw new ApiError(res.status, (data as { message?: string })?.message ?? `${res.status}`);
+  }
+  return { status: res.status, data: data as T };
+}
+
+/** Unauthenticated / session-bootstrap calls used by the sign-in screens. */
+export const authApi = {
+  config: async () => (await send<AuthConfig>("GET", `${AUTH}/config`)).data,
+  me: async () => (await send<{ user: User }>("GET", `${AUTH}/me`)).data.user,
+  login: async (email: string, password: string) =>
+    (await send<{ user: User }>("POST", `${AUTH}/login`, { email, password })).data.user,
+  register: async (email: string, password: string, claimPassword?: string) =>
+    (
+      await send<{ user: User }>("POST", `${AUTH}/register`, {
+        email,
+        password,
+        ...(claimPassword ? { claimPassword } : {}),
+      })
+    ).data.user,
+  logout: async () => {
+    await send<void>("POST", `${AUTH}/logout`);
+  },
+};
+
+export function createApi(onUnauthorized?: () => void) {
+  /**
+   * `passwordCheck` marks calls where a 401 means "wrong password" rather than
+   * an expired session, so they must not sign the user out.
+   */
   async function request<T>(
     method: string,
     base: string,
     path: string,
     body?: unknown,
+    passwordCheck = false,
   ): Promise<T> {
-    const token = await getToken();
-    const headers: Record<string, string> = {};
-    if (token) headers.authorization = `Bearer ${token}`;
-    if (body !== undefined) headers["content-type"] = "application/json";
-    const res = await fetch(`${base}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    const text = await res.text();
-    let data: unknown = null;
-    try { if (text) data = JSON.parse(text); } catch { /* non-JSON body — treat as empty */ }
-    if (!res.ok) {
-      if (res.status === 401) onUnauthorized?.();
-      throw new ApiError(res.status, (data as { message?: string })?.message ?? `${res.status}`);
+    try {
+      return (await send<T>(method, `${base}${path}`, body)).data;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401 && !passwordCheck) onUnauthorized?.();
+      throw err;
     }
-    return data as T;
   }
 
   const dash = <T>(method: string, path: string, body?: unknown) =>
@@ -152,13 +202,19 @@ export function createApi(getToken: TokenGetter, onUnauthorized?: () => void) {
         { name, scopes },
       ),
     deleteApiKey: (id: string) => auth<void>("DELETE", `/keys/${id}`),
+    me: () => auth<{ user: User }>("GET", "/me"),
+    logoutOthers: () => auth<{ revoked: number }>("POST", "/logout-others"),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<{ user: User }>("POST", AUTH, "/change-password", { currentPassword, newPassword }, true),
+    deleteAccount: (password: string) =>
+      request<void>("DELETE", AUTH, "/account", { password }, true),
   };
 }
 
 export type Api = ReturnType<typeof createApi>;
 
 export async function fetchPublicConfig(): Promise<PublicConfig> {
-  const res = await fetch("/api/v1/public-config");
+  const res = await fetch("/api/v1/public-config", { credentials: "same-origin" });
   if (!res.ok) throw new Error("Failed to load config");
   return res.json();
 }

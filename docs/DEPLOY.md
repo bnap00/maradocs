@@ -4,6 +4,11 @@ MaraDocs ships as a single Docker container: a Fastify API, a static file
 server, the SQLite metadata store, and the password-protected dashboard, all
 backed by a mounted `/data` volume.
 
+> Don't want to run a server? The Cloudflare edition deploys the same
+> publishing API as a Worker with D1 and R2 storage, through a one-click
+> Deploy button or `npm run setup`. It fits the Workers Free plan. See
+> [MaraDocs on Cloudflare](CLOUDFLARE.md).
+
 ## One-command setup (macOS / Linux)
 
 For a personal machine or single host, the setup script does everything —
@@ -31,11 +36,12 @@ npx @maradocs/server
 ```
 
 Standalone mode picks personal-machine defaults: data in `~/maradocs/data`,
-a cookie secret and admin password generated on first run and persisted
-(mode 0600) in `~/maradocs/data/standalone-secrets.json`, and the server
-bound to `127.0.0.1:8787`. Explicit environment variables (`PORT`, `HOST`,
-`DATA_DIR`, `PUBLIC_BASE_URL`, `ADMIN_PASSWORD`, `COOKIE_SECRET`) override
-every default.
+a cookie secret generated on first run and persisted (mode 0600) in
+`~/maradocs/data/standalone-secrets.json`, and the server bound to
+`127.0.0.1:8787`. Open `http://localhost:8787/dashboard/` to create your
+account (or run `maradocs auth bootstrap --register`). Explicit environment
+variables (`PORT`, `HOST`, `DATA_DIR`, `PUBLIC_BASE_URL`, `REGISTRATION`,
+`COOKIE_SECRET`) override every default.
 
 To expose it beyond the local machine, set `HOST=0.0.0.0` and
 `PUBLIC_BASE_URL` to the external URL — and put TLS in front (see the
@@ -62,14 +68,15 @@ Use it anywhere you'd otherwise build from the Dockerfile.
 
 ```bash
 cp .env.example .env
-# edit .env: set COOKIE_SECRET (openssl rand -hex 32) and ADMIN_PASSWORD
+# optional: edit .env (PUBLIC_BASE_URL, REGISTRATION, ...)
 docker compose up -d --build
-# open http://localhost:8787/dashboard/
+# open http://localhost:8787/dashboard/ and create your account
 ```
 
-`.env.example` ships with `COOKIE_SECRET` and `ADMIN_PASSWORD` empty on
-purpose: `docker compose up` fails with a clear message until you set real
-values, and the server refuses known placeholder values in production.
+No secrets are required. With the default `REGISTRATION=first`, the first
+person to open the dashboard creates the owner account and sign-up then
+closes, so create your account right after starting the server. See
+[Authentication](AUTH.md).
 
 The `./maradocs-data` directory is mounted at `/data` and holds `docs.db`
 plus the `repositories/` bundle tree.
@@ -78,9 +85,10 @@ plus the `repositories/` bundle tree.
 
 Production requires:
 
-- `ADMIN_PASSWORD`: dashboard login password.
-- `COOKIE_SECRET`: at least 32 characters; use `openssl rand -hex 32`.
 - `PUBLIC_BASE_URL`: external URL returned in publish responses.
+
+Optional: `REGISTRATION` (`first` by default), `COOKIE_SECRET` (generated and
+stored in the database if unset).
 
 See [Configuration](CONFIGURATION.md) for the full variable reference.
 
@@ -96,8 +104,8 @@ Dockerfile and redeploys on demand.
 2. **Add a volume.** Mount a persistent volume at `/data` so documents and the
    database survive redeploys.
 3. **Set environment variables** (from `.env.example`):
-   - `COOKIE_SECRET` (required), `ADMIN_PASSWORD` (required),
-     `PUBLIC_BASE_URL` (your external URL), `DEFAULT_REPO_ACCESS`, `MAX_UPLOAD_MB`
+   - `PUBLIC_BASE_URL` (your external URL), optionally `REGISTRATION`,
+     `DEFAULT_REPO_ACCESS`, `MAX_UPLOAD_MB`
 4. **Domain & TLS.** Attach a domain in Dokploy; its built-in Traefik proxy
    terminates TLS. Set `PUBLIC_BASE_URL` to that `https://…` URL.
 5. **Enable auto-deploy.** Copy the application's **Deploy webhook** URL and
@@ -141,12 +149,12 @@ maradocs-data/
 └── repositories/
 ```
 
-The SQLite database stores metadata, access settings, sessions, API key hashes, and version pointers. The `repositories/` tree stores the report files. Restoring only one of them can leave metadata and files out of sync.
+The SQLite database stores accounts (password hashes), metadata, access settings, sessions, API key hashes, and version pointers. The `repositories/` tree stores the report files. Restoring only one of them can leave metadata and files out of sync.
 
 ## Production checklist
 
-- [ ] `COOKIE_SECRET` set to a long random value (`openssl rand -hex 32`)
-- [ ] `ADMIN_PASSWORD` set to a strong value
+- [ ] Your account created right after the first deploy (with `REGISTRATION=first`, the first sign-up becomes the owner)
+- [ ] `REGISTRATION` left at `first` or set to `closed` unless open sign-up is intended
 - [ ] `PUBLIC_BASE_URL` points at the external HTTPS URL
 - [ ] `/data` backed by a persistent, backed-up volume
 - [ ] Externally shared public reports use a dedicated host or subdomain when possible

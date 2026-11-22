@@ -11,11 +11,13 @@ Requires Node 22+.
 npx @maradocs/server
 ```
 
-On first run it creates `~/maradocs/data`, generates and persists an admin
-password and cookie secret, and serves the dashboard at
-`http://localhost:8787/dashboard/`. Defaults can be overridden with
-environment variables (`PORT`, `HOST`, `DATA_DIR`, `PUBLIC_BASE_URL`,
-`ADMIN_PASSWORD`, `COOKIE_SECRET`).
+On first run it creates `~/maradocs/data` and serves the dashboard at
+`http://localhost:8787/dashboard/`, where the first visitor creates the owner
+account (email + password). No secrets need configuring. Defaults can be
+overridden with environment variables (`PORT`, `HOST`, `DATA_DIR`,
+`PUBLIC_BASE_URL`, `REGISTRATION` = `first` | `open` | `closed`,
+`COOKIE_SECRET`, and `ADMIN_PASSWORD` as an optional claim password for the
+first account).
 
 The server binds to `127.0.0.1` by default. Set `HOST=0.0.0.0` and a real
 `PUBLIC_BASE_URL` to expose it beyond the local machine — behind TLS.

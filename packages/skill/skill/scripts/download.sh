@@ -45,7 +45,14 @@ header_value() {
 }
 version_number="$(header_value x-maradocs-version-number)"
 checksum="$(header_value x-maradocs-checksum)"
-doc_entrypoint="$(header_value x-maradocs-entrypoint)"
+# Servers send any Unicode entrypoint percent-encoded (the plain header can
+# only carry printable ASCII); fall back to the plain header for older ones.
+encoded_entrypoint="$(header_value x-maradocs-entrypoint-encoded || true)"
+if [ -n "$encoded_entrypoint" ]; then
+  doc_entrypoint="$(printf '%b' "${encoded_entrypoint//%/\\x}")"
+else
+  doc_entrypoint="$(header_value x-maradocs-entrypoint || true)"
+fi
 
 result_common() {
   printf '"repo":"%s","doc":"%s","versionNumber":%s,"checksum":"%s","entrypoint":"%s"' \

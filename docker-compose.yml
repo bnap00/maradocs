@@ -16,10 +16,13 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8787}
       - DEFAULT_REPO_ACCESS=${DEFAULT_REPO_ACCESS:-private}
       - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-50}
-      # Required in production for signed password cookies.
-      - COOKIE_SECRET=${COOKIE_SECRET:?set COOKIE_SECRET in .env}
-      # Required. Dashboard login password; hashed in memory at startup.
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      # Who can create accounts: first (only the first account), open, closed.
+      - REGISTRATION=${REGISTRATION:-first}
+      # Optional. Signs report-unlock cookies; generated and stored in /data if empty.
+      - COOKIE_SECRET=${COOKIE_SECRET:-}
+      # Legacy, optional. Claim password for the first account when upgrading
+      # an instance from the admin-password version; ignored afterwards.
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     healthcheck:
       test:
         ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

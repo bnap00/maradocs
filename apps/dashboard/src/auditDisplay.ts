@@ -8,6 +8,14 @@ export const EVENT_LABEL: Record<string, { icon: string; label: string }> = {
   "doc.replace": { icon: "♻️", label: "Document replaced" },
   "doc.delete": { icon: "🗑️", label: "Document deleted" },
   "doc.rollback": { icon: "⏪", label: "Rolled back" },
+  "auth.register": { icon: "👤", label: "Account created" },
+  "auth.login": { icon: "🔑", label: "Signed in" },
+  "auth.login_failed": { icon: "⚠️", label: "Failed sign-in" },
+  "auth.logout": { icon: "👋", label: "Signed out" },
+  "auth.logout_others": { icon: "🚪", label: "Signed out other sessions" },
+  "password.change": { icon: "🔒", label: "Password changed" },
+  "key.create": { icon: "🗝️", label: "API key created" },
+  "key.delete": { icon: "🗑️", label: "API key deleted" },
 };
 
 export function auditEventMeta(event: string): { icon: string; label: string } {

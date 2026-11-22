@@ -7,7 +7,8 @@ import type { ServerConfig } from "./config.js";
 import type { AppContext } from "./context.js";
 import { Store } from "./db/store.js";
 import { Storage } from "./services/storage.js";
-import { LocalAuth, hashPassword } from "./auth/local.js";
+import crypto from "node:crypto";
+import { LocalAuth } from "./auth/local.js";
 import { HttpError } from "./util/errors.js";
 import { systemRoutes } from "./routes/system.js";
 import { apiRoutes } from "./routes/api.js";
@@ -25,9 +26,13 @@ export async function buildApp(config: ServerConfig): Promise<BuiltApp> {
   const store = new Store(config.dbPath);
   store.purgeExpiredSessions();
   const storage = new Storage(config.repositoriesDir);
-  const adminPasswordHash = await hashPassword(config.adminPassword, config.bcryptRounds);
-  const auth = new LocalAuth(store, adminPasswordHash);
-  const ctx: AppContext = { config, store, storage, auth };
+  const auth = new LocalAuth(store, config.bcryptRounds);
+  // No secrets are required to run: without COOKIE_SECRET, generate one on
+  // first start and persist it so signed cookies survive restarts.
+  const cookieSecret =
+    config.cookieSecret ??
+    store.getOrCreateSetting("cookie_secret", () => crypto.randomBytes(32).toString("hex"));
+  const ctx: AppContext = { config, store, storage, auth, cookieSecret };
 
   const app = Fastify({
     logger: {
@@ -42,6 +47,20 @@ export async function buildApp(config: ServerConfig): Promise<BuiltApp> {
   });
 
   app.decorate("ctx", ctx);
+
+  const userCount = store.countUsers();
+  if (config.adminPassword) {
+    if (userCount > 0) {
+      app.log.warn(
+        "ADMIN_PASSWORD is set but accounts already exist: it is no longer used for sign-in and can be removed",
+      );
+    } else {
+      app.log.info("ADMIN_PASSWORD is set: creating the first account requires it as the claim password");
+    }
+  }
+  if (userCount === 0 && config.registration !== "closed") {
+    app.log.info("No accounts yet: open the dashboard to create the owner account");
+  }
 
   await app.register(cookie);
   await app.register(multipart, {

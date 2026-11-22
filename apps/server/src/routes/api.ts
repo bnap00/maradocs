@@ -30,8 +30,8 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   const ctx = app.ctx;
   app.addHook("preHandler", requireMachine(ctx));
 
-  app.get("/repos", async () => ({
-    repos: listRepos(ctx),
+  app.get("/repos", async (req) => ({
+    repos: listRepos(ctx, req.machine!.userId),
   }));
 
   app.post("/repos", { preHandler: requireScope("publish") }, async (req, reply) => {
@@ -52,7 +52,7 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.get<{ Params: { repo: string } }>("/repos/:repo/docs", async (req) => ({
-    docs: listDocs(ctx, req.params.repo, requestOrigin(req)),
+    docs: listDocs(ctx, req.machine!.userId, req.params.repo, requestOrigin(req)),
   }));
 
   // Publish a new document (multipart: zip + fields).
@@ -106,7 +106,7 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { repo: string; doc: string } }>(
     "/repos/:repo/docs/:doc/versions",
     async (req) => ({
-      versions: listVersions(ctx, req.params.repo, req.params.doc),
+      versions: listVersions(ctx, req.machine!.userId, req.params.repo, req.params.doc),
     }),
   );
 
@@ -119,7 +119,13 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
       const { version } = z
         .object({ version: z.coerce.number().int().positive().optional() })
         .parse(req.query);
-      const bundle = getVersionBundle(ctx, req.params.repo, req.params.doc, version);
+      const bundle = getVersionBundle(
+        ctx,
+        req.machine!.userId,
+        req.params.repo,
+        req.params.doc,
+        version,
+      );
 
       const zip = new AdmZip();
       zip.addLocalFolder(bundle.dir);

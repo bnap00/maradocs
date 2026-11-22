@@ -64,7 +64,7 @@ async function publishDocumentUnlocked(
   actor: Actor,
   opts: PublishOptions = {},
 ): Promise<PublishResult> {
-  const repo = getRepoOr404(ctx, repoSlug);
+  const repo = getRepoOr404(ctx, actor.userId, repoSlug);
   const existing = ctx.store.getDoc(repo.id, input.doc);
 
   if (opts.mustExist && !existing) {
@@ -143,6 +143,7 @@ async function publishDocumentUnlocked(
   const { version: savedVersion, doc } = txResult;
 
   ctx.store.addAudit({
+    userId: actor.userId,
     event: existing ? "doc.replace" : "doc.publish",
     actorType: actor.type,
     actorId: actor.id,
@@ -168,10 +169,11 @@ async function publishDocumentUnlocked(
 
 export function listVersions(
   ctx: AppContext,
+  ownerId: string | null,
   repoSlug: string,
   docSlug: string,
 ): DocumentVersion[] {
-  const repo = getRepoOr404(ctx, repoSlug);
+  const repo = getRepoOr404(ctx, ownerId, repoSlug);
   const doc = ctx.store.getDoc(repo.id, docSlug);
   if (!doc) throw notFound(`Document '${repoSlug}/${docSlug}' not found`);
   return ctx.store.listVersions(doc.id, doc.latestVersionId);
@@ -192,11 +194,12 @@ export interface VersionBundle {
  */
 export function getVersionBundle(
   ctx: AppContext,
+  ownerId: string | null,
   repoSlug: string,
   docSlug: string,
   versionNumber?: number,
 ): VersionBundle {
-  const repo = getRepoOr404(ctx, repoSlug);
+  const repo = getRepoOr404(ctx, ownerId, repoSlug);
   const doc = ctx.store.getDoc(repo.id, docSlug);
   if (!doc) throw notFound(`Document '${repoSlug}/${docSlug}' not found`);
 
@@ -234,12 +237,13 @@ export function deleteDocument(
   docSlug: string,
   actor: Actor,
 ): void {
-  const repo = getRepoOr404(ctx, repoSlug);
+  const repo = getRepoOr404(ctx, actor.userId, repoSlug);
   const doc = ctx.store.getDoc(repo.id, docSlug);
   if (!doc) throw notFound(`Document '${repoSlug}/${docSlug}' not found`);
   ctx.store.deleteDoc(doc.id);
   ctx.storage.removeDir(ctx.storage.docDir(repo.slug, doc.slug));
   ctx.store.addAudit({
+    userId: actor.userId,
     event: "doc.delete",
     actorType: actor.type,
     actorId: actor.id,
@@ -258,7 +262,7 @@ export function rollbackDocument(
   actor: Actor,
   origin?: string,
 ) {
-  const repo = getRepoOr404(ctx, repoSlug);
+  const repo = getRepoOr404(ctx, actor.userId, repoSlug);
   const doc = ctx.store.getDoc(repo.id, docSlug);
   if (!doc) throw notFound(`Document '${repoSlug}/${docSlug}' not found`);
   const target = ctx.store.getVersionByNumber(doc.id, version);
@@ -269,6 +273,7 @@ export function rollbackDocument(
     entrypoint: target.entrypoint,
   });
   ctx.store.addAudit({
+    userId: actor.userId,
     event: "doc.rollback",
     actorType: actor.type,
     actorId: actor.id,

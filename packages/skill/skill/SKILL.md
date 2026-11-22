@@ -12,14 +12,14 @@ metadata:
 inputs:
   - name: MARADOCS_SERVER_URL
     required: false
-    description: Base URL of the MaraDocs publisher (e.g. https://docs.example.com). Falls back to ~/.maradocs/config.json from `maradocs auth login`.
+    description: Base URL of the MaraDocs publisher (e.g. https://docs.example.com). Falls back to ~/.maradocs/config.json from `maradocs auth bootstrap` / `maradocs auth login`.
   - name: MARADOCS_API_KEY
     required: false
     secret: true
-    description: MaraDocs API key for authenticating machine publishing. Falls back to ~/.maradocs/config.json from `maradocs auth login`.
+    description: MaraDocs API key for authenticating machine publishing (keys belong to your MaraDocs account). Falls back to ~/.maradocs/config.json from `maradocs auth bootstrap` / `maradocs auth login`.
   - name: report_path
-    required: true
-    description: Path to the folder containing index.html and assets (publish only).
+    required: false
+    description: Path to the folder containing index.html and assets. Required for publish (publish.sh); not used by download.sh.
   - name: repo
     required: true
     description: Repository slug to publish into (created on demand).
@@ -39,6 +39,18 @@ inputs:
   - name: entrypoint
     required: false
     description: Entry HTML file served at the document root (default index.html).
+  - name: version
+    required: false
+    description: Download only (download.sh). Pinned version number to download (default latest).
+  - name: out_dir
+    required: false
+    description: Download only (download.sh). Directory to extract into (default ./<doc>).
+  - name: zip_path
+    required: false
+    description: Download only (download.sh). Save the raw zip archive here instead of extracting.
+  - name: force
+    required: false
+    description: Download only (download.sh). Set to 1 to extract into a non-empty directory.
 ---
 
 # MaraDocs Publish
@@ -50,6 +62,21 @@ execution** — files are served as static assets only.
 
 All scripts print exactly one JSON object on stdout on success; progress and
 errors go to stderr, so stdout can be parsed directly.
+
+## Credentials
+
+The scripts only use an API key; they never sign in with a password. To get
+one, sign in with your MaraDocs account (email + password) once:
+
+```bash
+maradocs auth bootstrap --server https://docs.example.com --email you@example.com
+```
+
+This mints a publish-scoped key and saves it to `~/.maradocs/config.json`
+(add `--register` to create the account on a fresh server). Alternatively,
+create a key in the dashboard under API Keys and set `MARADOCS_SERVER_URL` and
+`MARADOCS_API_KEY`. A key only sees the repositories of the account that owns
+it.
 
 ## When to use
 

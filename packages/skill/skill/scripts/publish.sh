@@ -41,11 +41,13 @@ status "packaging '$report_path' ..."
 ( cd "$report_path" && zip -q -r "$tmp_zip" . \
     -x '.*' -x '*/.*' -x 'node_modules/*' -x '*/node_modules/*' )
 
-form=( -F "doc=${doc}" -F "file=@${tmp_zip};type=application/zip" )
-if [ -n "${access:-}" ]; then form+=( -F "access=${access}" ); fi
-if [ -n "${password:-}" ]; then form+=( -F "password=${password}" ); fi
-if [ -n "${title:-}" ]; then form+=( -F "title=${title}" ); fi
-if [ -n "${entrypoint:-}" ]; then form+=( -F "entrypoint=${entrypoint}" ); fi
+# Text fields use --form-string: with -F, a value starting with '@' or '<'
+# would make curl upload or inline a local file instead of the literal value.
+form=( --form-string "doc=${doc}" -F "file=@${tmp_zip};type=application/zip" )
+if [ -n "${access:-}" ]; then form+=( --form-string "access=${access}" ); fi
+if [ -n "${password:-}" ]; then form+=( --form-string "password=${password}" ); fi
+if [ -n "${title:-}" ]; then form+=( --form-string "title=${title}" ); fi
+if [ -n "${entrypoint:-}" ]; then form+=( --form-string "entrypoint=${entrypoint}" ); fi
 
 publish_request() {
   local method="$1" url="$2"

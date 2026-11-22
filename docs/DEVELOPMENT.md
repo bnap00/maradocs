@@ -20,7 +20,7 @@ Create local environment settings:
 
 ```bash
 cp .env.example .env
-# Set ADMIN_PASSWORD. The development COOKIE_SECRET fallback is allowed outside production.
+# No secrets needed. Open the dashboard and create the first account.
 ```
 
 Start the server and dashboard in separate terminals:
@@ -104,8 +104,6 @@ Run it with explicit production settings:
 docker run --rm -p 8787:8787 \
   -e NODE_ENV=production \
   -e PUBLIC_BASE_URL=http://localhost:8787 \
-  -e COOKIE_SECRET=$(openssl rand -hex 32) \
-  -e ADMIN_PASSWORD=change-me \
   maradocs:local
 ```
 

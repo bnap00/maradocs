@@ -1,30 +1,34 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { FolderGit2, KeyRound, ScrollText, LayoutDashboard } from "lucide-react";
-import { createApi, type TokenGetter } from "./api";
+import { FolderGit2, KeyRound, ScrollText, LayoutDashboard, UserRound, LogOut } from "lucide-react";
+import { createApi, type User } from "./api";
 import { Repositories } from "./views/Repositories";
 import { ApiKeys } from "./views/ApiKeys";
 import { Audit } from "./views/Audit";
 import { Overview } from "./views/Overview";
+import { Account } from "./views/Account";
 
-type View = "overview" | "repos" | "apiKeys" | "audit";
+type View = "overview" | "repos" | "apiKeys" | "audit" | "account";
 
 const NAV: { id: View; label: string; icon: ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <LayoutDashboard size={18} /> },
   { id: "repos", label: "Repositories", icon: <FolderGit2 size={18} /> },
   { id: "apiKeys", label: "API Keys", icon: <KeyRound size={18} /> },
   { id: "audit", label: "Audit log", icon: <ScrollText size={18} /> },
+  { id: "account", label: "Account", icon: <UserRound size={18} /> },
 ];
 
 export function Dashboard({
-  getToken,
-  account,
+  user,
+  onUserChange,
+  onSignOut,
   onSessionExpired,
 }: {
-  getToken: TokenGetter;
-  account: ReactNode;
+  user: User;
+  onUserChange: (user: User) => void;
+  onSignOut: () => void;
   onSessionExpired?: () => void;
 }) {
-  const api = useMemo(() => createApi(getToken, onSessionExpired), [getToken, onSessionExpired]);
+  const api = useMemo(() => createApi(onSessionExpired), [onSessionExpired]);
   const [view, setView] = useState<View>("overview");
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
 
@@ -43,7 +47,7 @@ export function Dashboard({
           <div className="logo">M</div>
           <div>
             <b>MaraDocs</b>
-            <small>Publisher dashboard live dev check</small>
+            <small>Publisher dashboard</small>
           </div>
         </div>
         {NAV.map((n) => (
@@ -56,7 +60,19 @@ export function Dashboard({
             {n.label}
           </button>
         ))}
-        <div className="sidebar-foot">{account}</div>
+        <div className="sidebar-foot">
+          <button
+            className="account-chip"
+            onClick={() => setView("account")}
+            title="Account settings"
+          >
+            <span className="avatar" aria-hidden="true">{user.email.charAt(0).toUpperCase()}</span>
+            <span className="account-email">{user.email}</span>
+          </button>
+          <button onClick={onSignOut} className="btn ghost sm signout">
+            <LogOut size={14} /> Sign out
+          </button>
+        </div>
       </aside>
 
       <main className="main">
@@ -64,6 +80,15 @@ export function Dashboard({
         {view === "repos" && <Repositories api={api} toast={showToast} />}
         {view === "apiKeys" && <ApiKeys api={api} toast={showToast} />}
         {view === "audit" && <Audit api={api} toast={showToast} />}
+        {view === "account" && (
+          <Account
+            api={api}
+            user={user}
+            toast={showToast}
+            onUserChange={onUserChange}
+            onAccountDeleted={onSignOut}
+          />
+        )}
       </main>
 
       {toast && <div className={`toast ${toast.error ? "error" : ""}`}>{toast.msg}</div>}

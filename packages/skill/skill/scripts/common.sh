@@ -44,7 +44,7 @@ json_str() {
 }
 
 # Resolve MARADOCS_SERVER_URL / MARADOCS_API_KEY, falling back to the config
-# saved by `maradocs auth login`. Sets the global `server` (no trailing /).
+# saved by `maradocs auth bootstrap` / `maradocs auth login`. Sets the global `server` (no trailing /).
 load_credentials() {
   local config_file="${MARADOCS_CONFIG_FILE:-${HOME:-}/.maradocs/config.json}"
   if [ -f "$config_file" ]; then
@@ -56,7 +56,7 @@ load_credentials() {
     fi
   fi
   if [ -z "${MARADOCS_SERVER_URL:-}" ] || [ -z "${MARADOCS_API_KEY:-}" ]; then
-    fail "no credentials: run \`maradocs auth login\` or set MARADOCS_SERVER_URL and MARADOCS_API_KEY"
+    fail "no credentials: run \`maradocs auth bootstrap --server <url> --email <you@example.com>\` (signs in with your MaraDocs account and saves an API key) or set MARADOCS_SERVER_URL and MARADOCS_API_KEY"
   fi
   server="${MARADOCS_SERVER_URL%/}"
 }

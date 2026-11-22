@@ -5,6 +5,8 @@ import {
   updateRepoSchema,
 } from "@maradocs/shared";
 import { requireUser } from "../auth/middleware.js";
+import { publicUser } from "../auth/local.js";
+import { notFound } from "../util/errors.js";
 import {
   createRepo,
   listDocs,
@@ -23,10 +25,14 @@ export async function dashboardApiRoutes(app: FastifyInstance): Promise<void> {
   const ctx = app.ctx;
   app.addHook("preHandler", requireUser(ctx));
 
-  app.get("/me", async (req) => ({ user: req.user }));
+  app.get("/me", async (req) => {
+    const user = ctx.store.getUserById(req.user!.userId);
+    if (!user) throw notFound("Account not found");
+    return { user: publicUser(user) };
+  });
 
-  app.get("/repos", async () => ({
-    repos: listRepos(ctx),
+  app.get("/repos", async (req) => ({
+    repos: listRepos(ctx, req.user!.userId),
   }));
 
   app.post("/repos", async (req, reply) => {
@@ -43,13 +49,13 @@ export async function dashboardApiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get<{ Params: { repo: string } }>("/repos/:repo/docs", async (req) => ({
-    docs: listDocs(ctx, req.params.repo, requestOrigin(req)),
+    docs: listDocs(ctx, req.user!.userId, req.params.repo, requestOrigin(req)),
   }));
 
   app.get<{ Params: { repo: string; doc: string } }>(
     "/repos/:repo/docs/:doc/versions",
     async (req) => ({
-      versions: listVersions(ctx, req.params.repo, req.params.doc),
+      versions: listVersions(ctx, req.user!.userId, req.params.repo, req.params.doc),
     }),
   );
 
@@ -77,7 +83,7 @@ export async function dashboardApiRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/machines", async () => ({ machines: ctx.store.listMachines() }));
+  app.get("/machines", async (req) => ({ machines: ctx.store.listMachines(req.user!.userId) }));
 
-  app.get("/audit", async () => ({ audit: ctx.store.listAudit(200) }));
+  app.get("/audit", async (req) => ({ audit: ctx.store.listAudit(req.user!.userId, 200) }));
 }

@@ -19,6 +19,8 @@
     "lint": "eslint . && pnpm -r lint",
     "test": "pnpm -r test",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "cf:dev": "pnpm --filter @maradocs/cloudflare run dev",
+    "cf:deploy": "pnpm --filter @maradocs/cloudflare run setup",
     "cli": "pnpm --filter ./packages/cli exec node dist/index.js",
     "start": "node apps/server/dist/index.js",
     "clean": "pnpm -r exec rm -rf dist node_modules .turbo && rm -rf node_modules"
@@ -27,6 +29,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
     "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
@@ -35,6 +38,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "better-sqlite3",
+      "workerd",
       "esbuild"
     ]
   }

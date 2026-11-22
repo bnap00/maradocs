@@ -104,6 +104,7 @@ export function registerDoc(program: Command): void {
               doc: docSlug,
               versionNumber: result.versionNumber,
               checksum: result.checksum,
+              entrypoint: result.entrypoint,
               zip: path.resolve(opts.zip),
             });
             return;
@@ -151,11 +152,11 @@ export function registerDoc(program: Command): void {
     .action(async (target: string, opts: { version: string; json?: boolean }) => {
       setJsonMode(Boolean(opts.json));
       const { repo, doc: docSlug } = parseTarget(target);
-      const { doc: updated } = await client().rollback(
-        repo,
-        docSlug,
-        Number(opts.version),
-      );
+      const version = Number(opts.version);
+      if (!Number.isInteger(version) || version < 1) {
+        throw new Error(`--version must be a positive integer, got '${opts.version}'`);
+      }
+      const { doc: updated } = await client().rollback(repo, docSlug, version);
       if (opts.json) {
         printJson(updated);
         return;

@@ -1,0 +1,60 @@
+{
+  // MaraDocs on Cloudflare: a single Worker backed by D1 (metadata) and R2
+  // (report files), with the dashboard served as static assets.
+  //
+  // D1 and R2 have no names or IDs here on purpose: `wrangler deploy` and the
+  // "Deploy to Cloudflare" button provision them automatically on first deploy,
+  // named after the Worker (<worker>-db, <worker>-bucket), and later deploys
+  // reuse the bindings already attached to the Worker. Never commit a
+  // database_id here (scripts/setup.test.mjs fails CI if you do).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "maradocs",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // node:zlib's native crc32 verifies uploaded zip entries and builds
+  // downloads without spending JavaScript CPU time.
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  // Per-version preview URLs would keep old versions invocable against the
+  // production D1/R2; MaraDocs has no use for them.
+  "preview_urls": false,
+  // Builds the dashboard SPA into public/dashboard before `wrangler dev`/`deploy`.
+  "build": {
+    "command": "vite build --config dashboard/vite.config.ts",
+    "watch_dir": "dashboard/src"
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // The Worker wraps dashboard responses to add its security headers (CSP,
+    // X-Frame-Options) and to fall back to index.html for client-side routes.
+    "run_worker_first": ["/dashboard", "/dashboard/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET"
+    }
+  ],
+  "vars": {
+    // Who may create accounts: "first" (only the first account, i.e. the
+    // owner), "open" (anyone) or "closed" (existing accounts only).
+    "REGISTRATION": "first",
+    // Access mode for repositories created without an explicit --access.
+    "DEFAULT_REPO_ACCESS": "private",
+    // Max zip upload size (capped at 25: Workers have 128 MB of memory). Larger
+    // publishes also need more than the Free plan's 10 ms of CPU.
+    "MAX_UPLOAD_MB": "25"
+  },
+  // Daily sweep of R2 blobs that no version references (see src/services/gc.ts).
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

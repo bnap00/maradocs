@@ -182,3 +182,34 @@ test("download rejects a non-numeric version before any request", async () => {
   assert.equal(result.code, 1);
   assert.match(result.stderr, /version must be a positive integer/);
 });
+
+test("download decodes a percent-encoded (Unicode) entrypoint header", async () => {
+  const zip = zipBuffer({ "index.html": "x\n" });
+  const server = http.createServer((req, res) => {
+    req.resume();
+    res
+      .writeHead(200, {
+        "content-type": "application/zip",
+        "x-maradocs-version-number": "1",
+        "x-maradocs-checksum": "c",
+        "x-maradocs-entrypoint-encoded": encodeURIComponent("报告 100%.html"),
+      })
+      .end(zip);
+  });
+  const port = await listen(server);
+  const dir = tmpdir("maradocs-skill-dl-");
+  try {
+    const result = await runScript("download.sh", scriptEnv({
+      MARADOCS_SERVER_URL: `http://127.0.0.1:${port}`,
+      MARADOCS_API_KEY: "mdo_test",
+      repo: "demo",
+      doc: "hello",
+      zip_path: path.join(dir, "b.zip"),
+    }));
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).entrypoint, "报告 100%.html");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

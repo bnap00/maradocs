@@ -8,6 +8,24 @@ import type {
 } from "@maradocs/shared";
 import type { CliConfig } from "./config.js";
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface AuthConfig {
+  registration: boolean;
+  claimRequired: boolean;
+  minPasswordLength: number;
+}
+
+/** `token` is only returned to non-browser clients; the CLI always is one. */
+export interface AuthSession {
+  user: AuthUser;
+  token?: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -75,12 +93,34 @@ export class MaraClient {
     return this.request("GET", "/health");
   }
 
-  /** Exchange the dashboard admin password for a short-lived session token. */
-  adminLogin(password: string): Promise<{ token: string }> {
-    return this.request("POST", "/api/v1/auth/login", { json: { password } });
+  /** Server auth settings: whether registration is open and needs a claim password. */
+  authConfig(): Promise<AuthConfig> {
+    return this.request("GET", "/api/v1/auth/config");
   }
 
-  /** Mint a new API key using an admin session token. The key is shown once. */
+  /**
+   * Sign in with an account's email and password. The CLI is a non-browser
+   * client (no Origin header), so the session token comes back in the body.
+   */
+  login(email: string, password: string): Promise<AuthSession> {
+    return this.request("POST", "/api/v1/auth/login", { json: { email, password } });
+  }
+
+  /** Create an account (and sign in). `claimPassword` is only needed on a fresh, claim-protected server. */
+  register(email: string, password: string, claimPassword?: string): Promise<AuthSession> {
+    const json: Record<string, string> = { email, password };
+    if (claimPassword) json.claimPassword = claimPassword;
+    return this.request("POST", "/api/v1/auth/register", { json });
+  }
+
+  /** Revoke a session token (e.g. the one `auth bootstrap` used). */
+  async logout(sessionToken: string): Promise<void> {
+    await this.request("POST", "/api/v1/auth/logout", {
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
+  }
+
+  /** Mint a new API key using an account session token. The key is shown once. */
   createApiKey(
     sessionToken: string,
     input: { name: string; scopes?: string[] },
@@ -160,7 +200,7 @@ export class MaraClient {
       buffer: Buffer.from(await res.arrayBuffer()),
       versionNumber: versionHeader ? Number(versionHeader) : null,
       checksum: res.headers.get("x-maradocs-checksum"),
-      entrypoint: res.headers.get("x-maradocs-entrypoint"),
+      entrypoint: entrypointFromHeaders(res.headers),
     };
   }
 
@@ -192,6 +232,23 @@ export class MaraClient {
       body: form,
     });
   }
+}
+
+/**
+ * The bundle's entrypoint. Servers that can send any Unicode name put it
+ * percent-encoded in x-maradocs-entrypoint-encoded (the raw header can only
+ * carry printable ASCII); older servers only send x-maradocs-entrypoint.
+ */
+export function entrypointFromHeaders(headers: Headers): string | null {
+  const encoded = headers.get("x-maradocs-entrypoint-encoded");
+  if (encoded !== null) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      /* fall back to the raw header */
+    }
+  }
+  return headers.get("x-maradocs-entrypoint");
 }
 
 function safeJson(text: string): unknown {

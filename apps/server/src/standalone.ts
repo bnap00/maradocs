@@ -5,14 +5,17 @@
  * before handing off to the normal server entrypoint:
  *
  * - DATA_DIR defaults to ~/maradocs/data
- * - COOKIE_SECRET and ADMIN_PASSWORD are generated on first run and
- *   persisted (mode 0600) in DATA_DIR/standalone-secrets.json
+ * - No secrets are required: accounts are created in the dashboard (the first
+ *   visitor creates the owner account) and the cookie-signing secret is
+ *   generated and stored in the database.
+ * - Upgraded installs keep the values in DATA_DIR/standalone-secrets.json: the
+ *   old generated admin password becomes the claim password the first account
+ *   must enter, so a stranger cannot claim an instance that already has data.
  * - PUBLIC_BASE_URL defaults to http://localhost:<port>
  * - HOST defaults to 127.0.0.1 (local-only; set HOST=0.0.0.0 to expose)
  *
  * Explicit environment variables always win over these defaults.
  */
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -37,43 +40,28 @@ if (fs.existsSync(secretsPath)) {
   try {
     secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8")) as StandaloneSecrets;
   } catch {
-    console.error(`warning: could not parse ${secretsPath}; regenerating secrets`);
+    console.error(`warning: could not parse ${secretsPath}; ignoring it`);
   }
 }
 
-const passwordFromEnv = Boolean(process.env.ADMIN_PASSWORD);
-let changed = false;
-let passwordGenerated = false;
-
-if (!process.env.COOKIE_SECRET) {
-  if (!secrets.cookieSecret) {
-    secrets.cookieSecret = crypto.randomBytes(32).toString("hex");
-    changed = true;
-  }
+// Earlier releases generated these; keep using them so existing password-gate
+// cookies stay valid and the old admin password protects the first sign-up.
+if (!process.env.COOKIE_SECRET && secrets.cookieSecret) {
   process.env.COOKIE_SECRET = secrets.cookieSecret;
 }
-
-if (!passwordFromEnv) {
-  if (!secrets.adminPassword) {
-    secrets.adminPassword = crypto.randomBytes(12).toString("hex");
-    changed = true;
-    passwordGenerated = true;
-  }
+const claimFromFile = !process.env.ADMIN_PASSWORD && Boolean(secrets.adminPassword);
+if (claimFromFile) {
   process.env.ADMIN_PASSWORD = secrets.adminPassword;
-}
-
-if (changed) {
-  fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2) + "\n", { mode: 0o600 });
 }
 
 console.log(`MaraDocs standalone`);
 console.log(`  Dashboard: ${process.env.PUBLIC_BASE_URL}/dashboard/`);
-if (passwordGenerated) {
+if (claimFromFile) {
   // Never print the password itself: stdout ends up in process-manager and
   // container logs. Point at the 0600 secrets file instead.
-  console.log(`  Admin password: generated — see ${secretsPath}`);
-} else if (!passwordFromEnv) {
-  console.log(`  Admin password: stored in ${secretsPath}`);
+  console.log(
+    `  Claim password for creating the first account (old admin password): see ${secretsPath}`,
+  );
 }
 console.log(`  Data dir: ${dataDir}`);
 

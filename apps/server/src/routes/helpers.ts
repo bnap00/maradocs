@@ -3,12 +3,12 @@ import type { Actor } from "../services/repoService.js";
 
 export function machineActor(req: FastifyRequest): Actor {
   const m = req.machine!;
-  return { type: "machine", id: m.apiKeyId, label: m.name };
+  return { type: "machine", id: m.apiKeyId, label: m.name, userId: m.userId };
 }
 
 export function userActor(req: FastifyRequest): Actor {
   const u = req.user!;
-  return { type: "user", id: u.userId, label: u.userId };
+  return { type: "user", id: u.userId, label: u.email, userId: u.userId };
 }
 
 export function requestOrigin(req: FastifyRequest): string {

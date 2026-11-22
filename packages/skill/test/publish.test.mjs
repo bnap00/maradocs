@@ -242,3 +242,43 @@ test("publish script is executable when packed", () => {
   const mode = fs.statSync(scriptPath).mode & 0o111;
   assert.notEqual(mode, 0, "publish.sh should have at least one executable bit set");
 });
+
+test("publish sends text fields literally, even when they start with @ or <", async () => {
+  const bodies = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.setEncoding("latin1");
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      bodies.push(body);
+      res.writeHead(201, { "content-type": "application/json" }).end('{"versionNumber":1}');
+    });
+  });
+  const port = await listen(server);
+  const dir = reportDir();
+  // A local file outside the report: its contents must never be sent.
+  const secretDir = tmpdir("maradocs-skill-secret-");
+  const secretFile = path.join(secretDir, "secret.txt");
+  fs.writeFileSync(secretFile, "LOCAL-FILE-CONTENTS");
+  try {
+    const result = await runScript("publish.sh", scriptEnv({
+      MARADOCS_SERVER_URL: `http://127.0.0.1:${port}`,
+      MARADOCS_API_KEY: "mdo_test",
+      report_path: dir,
+      repo: "demo",
+      doc: "hello",
+      access: "password",
+      title: `<${secretFile}`,
+      password: `@${secretFile}`,
+    }));
+    assert.equal(result.code, 0, result.stderr);
+    const body = bodies[0];
+    assert.match(body, new RegExp(`name="title"\\r\\n\\r\\n<${secretFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\r\\n`));
+    assert.match(body, new RegExp(`name="password"\\r\\n\\r\\n@${secretFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\r\\n`));
+    assert.doesNotMatch(body, /LOCAL-FILE-CONTENTS/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(secretDir, { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

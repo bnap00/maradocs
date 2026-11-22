@@ -15,6 +15,8 @@ import {
 import { contentTypeFor } from "../util/mime.js";
 import { notFound } from "../util/errors.js";
 import { passwordGateHtml, signInHtml } from "./passwordGate.js";
+import { bearer, sessionCredential } from "../auth/middleware.js";
+import { API_KEY_PREFIX } from "../auth/local.js";
 
 interface Resolved {
   repo: RepoRecord;
@@ -29,14 +31,25 @@ function resolve(ctx: AppContext, repoSlug: string, docSlug: string): Resolved |
   return { repo, doc };
 }
 
-function sessionToken(req: FastifyRequest): string | null {
-  const auth = req.headers.authorization;
-  if (auth) {
-    const m = /^Bearer\s+(.+)$/i.exec(auth);
-    if (m) return m[1]!.trim();
+/**
+ * Whether the request is authenticated as the repository's owner: a session
+ * of the owning account, or an API key (read/publish/admin) belonging to it.
+ * Other signed-in users get the same response as anonymous visitors.
+ */
+async function isOwner(ctx: AppContext, req: FastifyRequest, repo: RepoRecord): Promise<boolean> {
+  const token = bearer(req);
+  if (token?.startsWith(API_KEY_PREFIX)) {
+    const machine = await ctx.auth.verifyApiKey(token);
+    return Boolean(
+      machine &&
+        machine.userId === repo.ownerId &&
+        ["read", "publish", "admin"].some((s) => machine.scopes.includes(s)),
+    );
   }
-  const cookie = req.cookies["__session"];
-  return cookie ?? null;
+  const cred = sessionCredential(req);
+  if (!cred || repo.ownerId === null) return false;
+  const identity = await ctx.auth.verifySession(cred.token);
+  return identity?.userId === repo.ownerId;
 }
 
 function escapeHtml(value: string): string {
@@ -68,26 +81,13 @@ async function gate(
     const hash = effectivePasswordHash(repo, doc);
     if (!hash) return true; // misconfigured: no password set, treat as public
     const cookie = req.cookies[passwordCookieName(repo.slug, doc.slug)];
-    if (verifyPasswordCookie(ctx.config.cookieSecret, hash, cookie)) return true;
+    if (verifyPasswordCookie(ctx.cookieSecret, hash, cookie)) return true;
     reply.code(401).type("text/html").send(passwordGateHtml({ repo: repo.slug, doc: doc.slug }));
     return false;
   }
 
   // private
-  const token = sessionToken(req);
-  if (token) {
-    const identity = await ctx.auth.verifySession(token);
-    if (identity) return true;
-    const machine = await ctx.auth.verifyApiKey(token);
-    if (
-      machine &&
-      (machine.scopes.includes("read") ||
-        machine.scopes.includes("publish") ||
-        machine.scopes.includes("admin"))
-    ) {
-      return true;
-    }
-  }
+  if (await isOwner(ctx, req, repo)) return true;
   reply.code(401).type("text/html").send(signInHtml({ repo: repo.slug, doc: doc.slug }));
   return false;
 }
@@ -219,8 +219,8 @@ export async function readRoutes(app: FastifyInstance): Promise<void> {
       }
       reply.setCookie(
         passwordCookieName(found.repo.slug, found.doc.slug),
-        signPasswordCookie(ctx.config.cookieSecret, hash),
-        { path: `/r/${found.repo.slug}/${found.doc.slug}`, httpOnly: true, sameSite: "lax", secure: ctx.config.isProduction },
+        signPasswordCookie(ctx.cookieSecret, hash),
+        { path: `/r/${found.repo.slug}/${found.doc.slug}`, httpOnly: true, sameSite: "lax", secure: ctx.config.cookieSecure },
       );
       return reply.redirect(`/r/${found.repo.slug}/${found.doc.slug}/`, 303);
     },

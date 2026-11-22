@@ -16,14 +16,31 @@ npx @maradocs/cli --help
 
 ## Authenticate
 
-The fastest path is `auth bootstrap`, which mints a new API key with the dashboard admin password and saves it locally — no dashboard visit needed:
+The fastest path is `auth bootstrap`. It signs in with your MaraDocs account, mints a new API key, saves it locally, and signs the temporary session out again, so no dashboard visit is needed:
 
 ```bash
-maradocs auth bootstrap --server http://localhost:8787
-# Prompts for ADMIN_PASSWORD, creates a publish-scoped key, saves it.
+# Existing account
+maradocs auth bootstrap --server http://localhost:8787 --email you@example.com
+
+# Fresh server: create the first account as well
+maradocs auth bootstrap --server http://localhost:8787 --email you@example.com --register
+# (same as: maradocs auth register --server ... --email ...)
 ```
 
-Options: `--admin-password <pw>` (skip the prompt), `--name <name>`, `--scopes read,publish,admin`, `--no-save` (print the key without writing config), `--json`.
+The password is prompted without echo. Options:
+
+| Option | Env var | Description |
+|---|---|---|
+| `-e, --email <email>` | `MARADOCS_EMAIL` | Account email (prompted if omitted) |
+| `-p, --password <pw>` | `MARADOCS_PASSWORD` | Account password. Prefer the env var or the prompt, which keep it out of shell history. |
+| `--register` | | Create the account first. Works for the first account on a fresh server, or when the server runs with `REGISTRATION=open`. |
+| `--claim-password <pw>` | `MARADOCS_CLAIM_PASSWORD` | Only when creating the first account on a server upgraded from the admin-password version: its old `ADMIN_PASSWORD`. |
+| `-n, --name <name>` | | Key display name (default `cli-bootstrap`) |
+| `--scopes read,publish,admin` | | Key scopes (default `publish`) |
+| `--no-save` | | Print the key without writing config |
+| `--json` | | JSON output |
+
+`--admin-password` was removed along with the shared admin password; see [AUTH.md](AUTH.md).
 
 If you already have an API key (created in the dashboard under **API Keys**), store it directly:
 
@@ -135,6 +152,8 @@ maradocs doc download demo/hello --out ./report
 maradocs doc download demo/hello -v 2       # pinned version
 maradocs doc download demo/hello --zip hello.zip  # keep the archive
 ```
+
+`-v N` and `--version N` are the same option on `doc download` and `doc rollback`. Only before a command, `maradocs --version` (or `-V`) prints the CLI's own version.
 
 Extraction refuses to overwrite a non-empty directory unless `--force` is given. The typical update loop:
 

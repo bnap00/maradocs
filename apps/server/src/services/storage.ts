@@ -11,6 +11,10 @@ import path from "node:path";
 export class Storage {
   constructor(private repositoriesDir: string) {}
 
+  repoDir(repoSlug: string): string {
+    return path.join(this.repositoriesDir, repoSlug);
+  }
+
   docDir(repoSlug: string, docSlug: string): string {
     return path.join(this.repositoriesDir, repoSlug, docSlug);
   }

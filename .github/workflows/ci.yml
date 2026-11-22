@@ -26,6 +26,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: "Cloudflare: vendored sources up to date"
+        run: pnpm --filter @maradocs/cloudflare sync:check
+      # parseCli/pickOrigin/readDeployTargets, and a guard that wrangler.jsonc
+      # carries no account-specific database_id (wrangler writes one back
+      # after an interactive first deploy).
+      - name: "Cloudflare: setup script unit tests"
+        run: pnpm --filter @maradocs/cloudflare test:scripts
+      # `pnpm -r typecheck` and `pnpm test` include apps/cloudflare (Worker +
+      # dashboard typecheck, vitest inside workerd with local D1/R2).
       - name: Typecheck
         run: pnpm -r typecheck
       - name: Lint
@@ -38,6 +47,56 @@ jobs:
         run: node packages/skill/scripts/check.mjs
       - name: End-to-end smoke
         run: pnpm e2e:smoke
+      - name: "Cloudflare: build and bundle the Worker (dry-run deploy)"
+        working-directory: apps/cloudflare
+        run: npx --no wrangler deploy --dry-run --outdir "$RUNNER_TEMP/maradocs-cf-dry-run"
+      - name: "Cloudflare: end-to-end (wrangler dev + real CLI)"
+        run: pnpm --filter @maradocs/cloudflare e2e
+
+  # The "Deploy to Cloudflare" button copies only apps/cloudflare (tracked
+  # files) into a new repository and installs it with npm. Reproduce that here,
+  # outside the pnpm workspace, so hoisted monorepo packages, gitignored source
+  # files or a stale package-lock.json can't hide problems.
+  cloudflare-standalone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Export apps/cloudflare as the Deploy button sees it
+        run: |
+          mkdir -p "$RUNNER_TEMP/cf"
+          git archive HEAD:apps/cloudflare | tar -x -C "$RUNNER_TEMP/cf"
+      - name: Install (npm ci from the committed package-lock.json)
+        working-directory: ${{ runner.temp }}/cf
+        run: npm ci --no-audit --no-fund
+      - name: package-lock.json matches package.json
+        working-directory: ${{ runner.temp }}/cf
+        run: |
+          cp package-lock.json "$RUNNER_TEMP/package-lock.committed.json"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          diff -u "$RUNNER_TEMP/package-lock.committed.json" package-lock.json \
+            || { echo "::error::apps/cloudflare/package-lock.json is stale. Regenerate it in a standalone copy (see apps/cloudflare/README.md)."; exit 1; }
+      - name: Typecheck
+        working-directory: ${{ runner.temp }}/cf
+        run: npm run typecheck
+      - name: Setup script
+        working-directory: ${{ runner.temp }}/cf
+        run: |
+          npm run test:scripts
+          node scripts/setup.mjs --help
+          node scripts/setup.mjs --dry-run --no-cli
+          node scripts/setup.mjs -- --dry-run --skip-password --no-cli
+      - name: Build and bundle (dry-run deploy)
+        working-directory: ${{ runner.temp }}/cf
+        run: npx --no wrangler deploy --dry-run --outdir "$RUNNER_TEMP/cf-dry-run"
+      - name: Dashboard static files are part of the build
+        working-directory: ${{ runner.temp }}/cf
+        run: test -f public/dashboard/index.html && test -f public/dashboard/favicon.svg
+      - name: Integration tests (workerd, local D1/R2)
+        working-directory: ${{ runner.temp }}/cf
+        run: npm test
 
   docker:
     runs-on: ubuntu-latest

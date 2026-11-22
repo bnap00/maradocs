@@ -21,7 +21,7 @@ export function Audit({ api, toast }: { api: Api; toast: (m: string, e?: boolean
       <div className="topbar">
         <div>
           <h1>Audit log</h1>
-          <p>Publishes, deletes, access changes, and rollbacks.</p>
+          <p>Sign-ins, account changes, API keys, publishes, deletes, access changes, and rollbacks.</p>
         </div>
       </div>
 

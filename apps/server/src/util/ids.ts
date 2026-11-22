@@ -7,6 +7,7 @@ const PREFIXES = {
   mach: "mach",
   audit: "aud",
   apikey: "akey",
+  user: "usr",
 } as const;
 
 export type IdKind = keyof typeof PREFIXES;

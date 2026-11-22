@@ -210,6 +210,50 @@ button { font-family: inherit; }
 @media (max-width: 820px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; }
-  .sidebar-foot { display: none; }
+  .sidebar-foot { width: 100%; display: flex; align-items: center; gap: 8px; }
+  .sidebar-foot .signout { margin-top: 0; width: auto; }
   .main { padding: 20px; }
+}
+
+/* ---- Auth screens ---- */
+.signin-card { width: min(92vw, 380px); }
+.auth-title { font-size: 20px; margin: 0 0 6px; letter-spacing: -0.02em; }
+.auth-sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; line-height: 1.5; }
+.auth-form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.auth-submit { justify-content: center; padding: 11px 15px; }
+.auth-error { color: var(--red); font-size: 13px; text-align: left; }
+.auth-switch { margin-top: 18px; color: var(--muted); font-size: 13px; }
+.auth-switch button {
+  background: none; border: 0; padding: 0; color: var(--accent); font: inherit;
+  font-weight: 600; cursor: pointer;
+}
+.auth-switch button:hover { text-decoration: underline; }
+
+/* ---- Sidebar account ---- */
+.account-chip {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border-radius: 10px;
+  border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left;
+}
+.account-chip:hover { background: var(--panel); }
+.avatar {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel-hover); border: 1px solid var(--border-strong);
+  font-size: 12px; font-weight: 700; color: var(--accent);
+}
+.account-email { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sidebar-foot .signout { margin-top: 6px; width: 100%; }
+
+/* ---- Account settings ---- */
+.settings-card { max-width: 720px; }
+.settings-head { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; }
+.settings-head svg { margin-top: 2px; flex: none; }
+.settings-head .grow { flex: 1; min-width: 0; }
+.settings-head h2 { margin: 0; font-size: 15px; }
+.settings-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.settings-body { padding: 0 20px 20px 52px; max-width: 460px; }
+.danger-zone { border-color: rgba(248, 113, 113, 0.3); }
+
+@media (max-width: 820px) {
+  .settings-head { flex-wrap: wrap; }
+  .settings-body { padding-left: 20px; }
 }

@@ -1,0 +1,11 @@
+node_modules/
+.wrangler/
+# Local secrets. Wrangler reads .dev.vars, .dev.vars.<env> and, when there is
+# no .dev.vars, .env / .env.<env>. Only the examples are committed.
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+# Dashboard build output (produced by `npm run build` / wrangler build.command).
+# Anchored: dashboard/public (Vite's static files, e.g. favicon.svg) is source.
+/public/

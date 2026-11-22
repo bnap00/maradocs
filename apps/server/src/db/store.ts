@@ -9,13 +9,14 @@ import type {
   PublishedByType,
   Repository,
 } from "@maradocs/shared";
-import { SCHEMA_SQL } from "./schema.js";
+import { OWNER_INDEX_SQL, SCHEMA_SQL } from "./schema.js";
 import { newId } from "../util/ids.js";
 
 const nowIso = () => new Date().toISOString();
 
 interface RepoRow {
   id: string;
+  owner_id: string | null;
   slug: string;
   name: string;
   description: string | null;
@@ -66,6 +67,7 @@ interface MachineRow {
 
 interface ApiKeyRow {
   id: string;
+  user_id: string | null;
   name: string;
   key_hash: string;
   prefix: string;
@@ -76,12 +78,32 @@ interface ApiKeyRow {
 
 interface SessionRow {
   token_hash: string;
+  user_id: string;
   created_at: string;
   expires_at: string;
+  last_seen: string;
+  user_agent: string | null;
+}
+
+interface UserRow {
+  id: string;
+  email: string;
+  password_hash: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  passwordHash: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiKey {
   id: string;
+  userId: string | null;
   name: string;
   keyHash: string;
   prefix: string;
@@ -92,8 +114,32 @@ export interface ApiKey {
 
 export interface Session {
   tokenHash: string;
+  userId: string;
   createdAt: string;
   expiresAt: string;
+  lastSeen: string;
+  userAgent: string | null;
+}
+
+function mapSession(row: SessionRow): Session {
+  return {
+    tokenHash: row.token_hash,
+    userId: row.user_id,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    lastSeen: row.last_seen,
+    userAgent: row.user_agent,
+  };
+}
+
+function mapUser(row: UserRow): UserRecord {
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 interface AuditRow {
@@ -109,6 +155,8 @@ interface AuditRow {
 }
 
 export interface RepoRecord extends Repository {
+  /** Owning account; null only for legacy rows not yet adopted by the first account. */
+  ownerId: string | null;
   passwordHash: string | null;
 }
 
@@ -128,6 +176,7 @@ export interface DocRecord {
 function mapRepo(row: RepoRow): RepoRecord {
   return {
     id: row.id,
+    ownerId: row.owner_id,
     slug: row.slug,
     name: row.name,
     description: row.description,
@@ -158,6 +207,7 @@ function mapDoc(row: DocRow): DocRecord {
 function mapApiKey(row: ApiKeyRow): ApiKey {
   return {
     id: row.id,
+    userId: row.user_id,
     name: row.name,
     keyHash: row.key_hash,
     prefix: row.prefix,
@@ -193,14 +243,33 @@ export class Store {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA_SQL);
-    this.ensureApiKeyScopesColumn();
+    this.migrate();
   }
 
-  private ensureApiKeyScopesColumn(): void {
-    const columns = this.db.prepare(`PRAGMA table_info(api_keys)`).all() as { name: string }[];
-    if (!columns.some((column) => column.name === "scopes")) {
+  private hasColumn(table: string, column: string): boolean {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return columns.some((c) => c.name === column);
+  }
+
+  /** Bring databases created by older releases up to the current schema. */
+  private migrate(): void {
+    if (!this.hasColumn("api_keys", "scopes")) {
       this.db.exec(`ALTER TABLE api_keys ADD COLUMN scopes TEXT NOT NULL DEFAULT '["publish"]'`);
     }
+    // User accounts: owner columns on existing tables. Legacy rows stay NULL
+    // until the first account is created, which adopts them.
+    if (!this.hasColumn("repositories", "owner_id")) {
+      this.db.exec(`ALTER TABLE repositories ADD COLUMN owner_id TEXT`);
+    }
+    if (!this.hasColumn("api_keys", "user_id")) {
+      this.db.exec(`ALTER TABLE api_keys ADD COLUMN user_id TEXT`);
+    }
+    if (!this.hasColumn("audit_log", "user_id")) {
+      this.db.exec(`ALTER TABLE audit_log ADD COLUMN user_id TEXT`);
+    }
+    // The single-admin session table is gone: everyone signs in again.
+    this.db.exec(`DROP TABLE IF EXISTS admin_sessions`);
+    this.db.exec(OWNER_INDEX_SQL);
   }
 
   close(): void {
@@ -210,6 +279,7 @@ export class Store {
   // ---- Repositories -------------------------------------------------------
 
   createRepo(input: {
+    ownerId: string | null;
     slug: string;
     name: string;
     description: string | null;
@@ -222,11 +292,12 @@ export class Store {
     this.db
       .prepare(
         `INSERT INTO repositories
-         (id, slug, name, description, default_access, index_enabled, password_hash, created_at, updated_at)
-         VALUES (@id, @slug, @name, @description, @default_access, @index_enabled, @password_hash, @created_at, @updated_at)`,
+         (id, owner_id, slug, name, description, default_access, index_enabled, password_hash, created_at, updated_at)
+         VALUES (@id, @owner_id, @slug, @name, @description, @default_access, @index_enabled, @password_hash, @created_at, @updated_at)`,
       )
       .run({
         id,
+        owner_id: input.ownerId,
         slug: input.slug,
         name: input.name,
         description: input.description,
@@ -246,10 +317,11 @@ export class Store {
     return row ? mapRepo(row) : null;
   }
 
-  listRepos(): RepoRecord[] {
+  /** Repositories owned by `ownerId` (`IS` so a null owner matches legacy rows). */
+  listRepos(ownerId: string | null): RepoRecord[] {
     const rows = this.db
-      .prepare(`SELECT * FROM repositories ORDER BY created_at DESC`)
-      .all() as RepoRow[];
+      .prepare(`SELECT * FROM repositories WHERE owner_id IS ? ORDER BY created_at DESC`)
+      .all(ownerId) as RepoRow[];
     return rows.map(mapRepo);
   }
 
@@ -500,10 +572,14 @@ export class Store {
     });
   }
 
-  listMachines(): Machine[] {
+  /** Machines seen through API keys owned by `userId`. */
+  listMachines(userId: string): Machine[] {
     const rows = this.db
-      .prepare(`SELECT * FROM machines ORDER BY last_used_at DESC NULLS LAST`)
-      .all() as MachineRow[];
+      .prepare(
+        `SELECT m.* FROM machines m JOIN api_keys k ON k.id = m.key_id
+         WHERE k.user_id = ? ORDER BY m.last_used_at DESC NULLS LAST`,
+      )
+      .all(userId) as MachineRow[];
     return rows.map((r) => this.mapMachine(r));
   }
 
@@ -521,16 +597,23 @@ export class Store {
 
   // ---- API Keys -----------------------------------------------------------
 
-  createApiKey(input: { name: string; keyHash: string; prefix: string; scopes: string[] }): ApiKey {
+  createApiKey(input: {
+    userId: string | null;
+    name: string;
+    keyHash: string;
+    prefix: string;
+    scopes: string[];
+  }): ApiKey {
     const id = newId("apikey");
     const ts = nowIso();
     this.db
       .prepare(
-        `INSERT INTO api_keys (id, name, key_hash, prefix, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO api_keys (id, user_id, name, key_hash, prefix, scopes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, input.name, input.keyHash, input.prefix, JSON.stringify(input.scopes), ts);
+      .run(id, input.userId, input.name, input.keyHash, input.prefix, JSON.stringify(input.scopes), ts);
     return {
       id,
+      userId: input.userId,
       name: input.name,
       keyHash: input.keyHash,
       prefix: input.prefix,
@@ -547,15 +630,23 @@ export class Store {
     return row ? mapApiKey(row) : null;
   }
 
-  listApiKeys(): ApiKey[] {
+  listApiKeys(userId: string): ApiKey[] {
     const rows = this.db
-      .prepare(`SELECT * FROM api_keys ORDER BY created_at DESC`)
-      .all() as ApiKeyRow[];
+      .prepare(`SELECT * FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`)
+      .all(userId) as ApiKeyRow[];
     return rows.map(mapApiKey);
   }
 
-  deleteApiKey(id: string): void {
-    this.db.prepare(`DELETE FROM api_keys WHERE id = ?`).run(id);
+  /** Delete one of `userId`'s keys (and its machines row). False when not theirs. */
+  deleteApiKey(id: string, userId: string): boolean {
+    return this.tx(() => {
+      const res = this.db
+        .prepare(`DELETE FROM api_keys WHERE id = ? AND user_id = ?`)
+        .run(id, userId);
+      if (res.changes === 0) return false;
+      this.db.prepare(`DELETE FROM machines WHERE key_id = ?`).run(id);
+      return true;
+    });
   }
 
   touchApiKey(id: string): void {
@@ -564,41 +655,160 @@ export class Store {
       .run(nowIso(), id);
   }
 
-  // ---- Sessions -----------------------------------------------------------
+  // ---- Users --------------------------------------------------------------
 
-  createSession(input: { tokenHash: string; expiresAt: string }): Session {
-    const ts = nowIso();
-    this.db
-      .prepare(
-        `INSERT INTO admin_sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)`,
-      )
-      .run(input.tokenHash, ts, input.expiresAt);
-    return { tokenHash: input.tokenHash, createdAt: ts, expiresAt: input.expiresAt };
+  countUsers(): number {
+    return (this.db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as { n: number }).n;
   }
 
-  getSessionByHash(tokenHash: string): Session | null {
-    const now = nowIso();
-    const row = this.db
+  getUserByEmail(email: string): UserRecord | null {
+    const row = this.db.prepare(`SELECT * FROM users WHERE email = ?`).get(email) as
+      | UserRow
+      | undefined;
+    return row ? mapUser(row) : null;
+  }
+
+  getUserById(id: string): UserRecord | null {
+    const row = this.db.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as UserRow | undefined;
+    return row ? mapUser(row) : null;
+  }
+
+  /**
+   * Insert a user. When `guard` is given it runs inside the same transaction
+   * (e.g. "registration only while no users exist") so concurrent sign-ups
+   * cannot both pass the check. The first account ever created adopts every
+   * legacy row (repositories, API keys, audit entries) that has no owner yet.
+   */
+  createUser(
+    input: { email: string; passwordHash: string },
+    guard?: (userCount: number) => void,
+  ): UserRecord {
+    return this.tx(() => {
+      const count = this.countUsers();
+      guard?.(count);
+      const ts = nowIso();
+      const id = newId("user");
+      this.db
+        .prepare(
+          `INSERT INTO users (id, email, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(id, input.email, input.passwordHash, ts, ts);
+      if (count === 0) {
+        this.db.prepare(`UPDATE repositories SET owner_id = ? WHERE owner_id IS NULL`).run(id);
+        this.db.prepare(`UPDATE api_keys SET user_id = ? WHERE user_id IS NULL`).run(id);
+        this.db.prepare(`UPDATE audit_log SET user_id = ? WHERE user_id IS NULL`).run(id);
+      }
+      return this.getUserById(id)!;
+    });
+  }
+
+  updateUserPassword(id: string, passwordHash: string): void {
+    this.db
+      .prepare(`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`)
+      .run(passwordHash, nowIso(), id);
+  }
+
+  /**
+   * Delete a user and everything they own: sessions, API keys + machines,
+   * repositories (documents and versions cascade) and audit rows. Returns the
+   * slugs of the deleted repositories so the caller can remove stored files.
+   */
+  deleteUser(id: string): string[] {
+    return this.tx(() => {
+      const slugs = (
+        this.db.prepare(`SELECT slug FROM repositories WHERE owner_id = ?`).all(id) as {
+          slug: string;
+        }[]
+      ).map((r) => r.slug);
+      this.db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(id);
+      this.db
+        .prepare(`DELETE FROM machines WHERE key_id IN (SELECT id FROM api_keys WHERE user_id = ?)`)
+        .run(id);
+      this.db.prepare(`DELETE FROM api_keys WHERE user_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM repositories WHERE owner_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM audit_log WHERE user_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM users WHERE id = ?`).run(id);
+      return slugs;
+    });
+  }
+
+  // ---- Sessions -----------------------------------------------------------
+
+  createSession(input: {
+    tokenHash: string;
+    userId: string;
+    expiresAt: string;
+    userAgent?: string | null;
+  }): Session {
+    const ts = nowIso();
+    const userAgent = input.userAgent ? input.userAgent.slice(0, 200) : null;
+    this.db
       .prepare(
-        `SELECT * FROM admin_sessions WHERE token_hash = ? AND expires_at > ?`,
+        `INSERT INTO sessions (token_hash, user_id, created_at, expires_at, last_seen, user_agent)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .get(tokenHash, now) as SessionRow | undefined;
-    return row
-      ? { tokenHash: row.token_hash, createdAt: row.created_at, expiresAt: row.expires_at }
-      : null;
+      .run(input.tokenHash, input.userId, ts, input.expiresAt, ts, userAgent);
+    return {
+      tokenHash: input.tokenHash,
+      userId: input.userId,
+      createdAt: ts,
+      expiresAt: input.expiresAt,
+      lastSeen: ts,
+      userAgent,
+    };
+  }
+
+  /** Look up a session by token hash, including expired ones (caller decides). */
+  getSessionByHash(tokenHash: string): Session | null {
+    const row = this.db
+      .prepare(`SELECT * FROM sessions WHERE token_hash = ?`)
+      .get(tokenHash) as SessionRow | undefined;
+    return row ? mapSession(row) : null;
+  }
+
+  touchSession(tokenHash: string, lastSeen: string, expiresAt: string): void {
+    this.db
+      .prepare(`UPDATE sessions SET last_seen = ?, expires_at = ? WHERE token_hash = ?`)
+      .run(lastSeen, expiresAt, tokenHash);
   }
 
   deleteSession(tokenHash: string): void {
-    this.db.prepare(`DELETE FROM admin_sessions WHERE token_hash = ?`).run(tokenHash);
+    this.db.prepare(`DELETE FROM sessions WHERE token_hash = ?`).run(tokenHash);
+  }
+
+  /** Revoke every session of `userId` except `keepTokenHash`. Returns how many were removed. */
+  deleteOtherSessions(userId: string, keepTokenHash: string): number {
+    return this.db
+      .prepare(`DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`)
+      .run(userId, keepTokenHash).changes;
   }
 
   purgeExpiredSessions(): void {
-    this.db.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").run(nowIso());
+    this.db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(nowIso());
+  }
+
+  // ---- Settings -----------------------------------------------------------
+
+  getSetting(key: string): string | null {
+    const row = this.db.prepare(`SELECT value FROM settings WHERE key = ?`).get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  }
+
+  /** Return the stored value, or atomically store and return `create()`'s. */
+  getOrCreateSetting(key: string, create: () => string): string {
+    this.db
+      .prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`)
+      .run(key, create());
+    return this.getSetting(key)!;
   }
 
   // ---- Audit --------------------------------------------------------------
 
   addAudit(input: {
+    /** Account the event concerns (owner of the resource); null for anonymous events. */
+    userId: string | null;
     event: string;
     actorType: "machine" | "user" | "system";
     actorId: string | null;
@@ -609,11 +819,12 @@ export class Store {
   }): void {
     this.db
       .prepare(
-        `INSERT INTO audit_log (id, event, actor_type, actor_id, actor_label, repository_slug, document_slug, detail, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO audit_log (id, user_id, event, actor_type, actor_id, actor_label, repository_slug, document_slug, detail, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         newId("audit"),
+        input.userId,
         input.event,
         input.actorType,
         input.actorId,
@@ -625,10 +836,10 @@ export class Store {
       );
   }
 
-  listAudit(limit = 100): AuditEntry[] {
+  listAudit(userId: string, limit = 100): AuditEntry[] {
     const rows = this.db
-      .prepare(`SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?`)
-      .all(limit) as AuditRow[];
+      .prepare(`SELECT * FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`)
+      .all(userId, limit) as AuditRow[];
     return rows.map((r) => ({
       id: r.id,
       event: r.event,

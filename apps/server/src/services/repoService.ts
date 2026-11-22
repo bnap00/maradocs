@@ -14,16 +14,23 @@ export interface Actor {
   type: "machine" | "user";
   id: string | null;
   label: string | null;
+  /**
+   * Account acting (a session's user, or the owner of the API key). Every
+   * repository lookup is scoped to it. Null only for a legacy, not yet
+   * adopted API key, which then only sees legacy (ownerless) repositories.
+   */
+  userId: string | null;
 }
 
-export function getRepoOr404(ctx: AppContext, slug: string): RepoRecord {
+/** Look up a repository owned by `ownerId`; other users' repositories are invisible (404). */
+export function getRepoOr404(ctx: AppContext, ownerId: string | null, slug: string): RepoRecord {
   const repo = ctx.store.getRepo(slug);
-  if (!repo) throw notFound(`Repository '${slug}' not found`);
+  if (!repo || repo.ownerId !== ownerId) throw notFound(`Repository '${slug}' not found`);
   return repo;
 }
 
-export function listRepos(ctx: AppContext): Repository[] {
-  return ctx.store.listRepos().map(presentRepo);
+export function listRepos(ctx: AppContext, ownerId: string | null): Repository[] {
+  return ctx.store.listRepos(ownerId).map(presentRepo);
 }
 
 export async function createRepo(
@@ -31,8 +38,15 @@ export async function createRepo(
   input: CreateRepoInput,
   actor: Actor,
 ): Promise<Repository> {
-  if (ctx.store.getRepo(input.slug)) {
-    throw conflict(`Repository '${input.slug}' already exists`);
+  const existing = ctx.store.getRepo(input.slug);
+  if (existing) {
+    // Slugs are global (reader URLs are /r/:repo/:doc), so another user's
+    // repository blocks the slug too.
+    throw conflict(
+      existing.ownerId === actor.userId
+        ? `Repository '${input.slug}' already exists`
+        : `Repository slug '${input.slug}' is already taken`,
+    );
   }
   const access = input.access ?? ctx.config.defaultRepoAccess;
   if (access === "password" && !input.password) {
@@ -40,6 +54,7 @@ export async function createRepo(
   }
   const passwordHash = input.password ? await hashPassword(input.password) : null;
   const repo = ctx.store.createRepo({
+    ownerId: actor.userId,
     slug: input.slug,
     name: input.name ?? input.slug,
     description: input.description ?? null,
@@ -48,6 +63,7 @@ export async function createRepo(
     passwordHash,
   });
   ctx.store.addAudit({
+    userId: actor.userId,
     event: "repo.create",
     actorType: actor.type,
     actorId: actor.id,
@@ -65,7 +81,7 @@ export async function updateRepo(
   input: UpdateRepoInput,
   actor: Actor,
 ): Promise<Repository> {
-  const repo = getRepoOr404(ctx, slug);
+  const repo = getRepoOr404(ctx, actor.userId, slug);
   const fields: Parameters<typeof ctx.store.updateRepo>[1] = {};
   if (input.name !== undefined) fields.name = input.name;
   if (input.description !== undefined) fields.description = input.description;
@@ -87,6 +103,7 @@ export async function updateRepo(
   ctx.store.updateRepo(repo.id, fields);
   const changedAccess = input.access !== undefined || input.password !== undefined;
   ctx.store.addAudit({
+    userId: actor.userId,
     event: changedAccess ? "access.change" : "repo.update",
     actorType: actor.type,
     actorId: actor.id,
@@ -95,14 +112,15 @@ export async function updateRepo(
     documentSlug: null,
     detail: input.access ? `access=${input.access}` : "metadata updated",
   });
-  return presentRepo(getRepoOr404(ctx, slug));
+  return presentRepo(getRepoOr404(ctx, actor.userId, slug));
 }
 
 export function listDocs(
   ctx: AppContext,
+  ownerId: string | null,
   slug: string,
   origin?: string,
 ): DocumentSummary[] {
-  const repo = getRepoOr404(ctx, slug);
+  const repo = getRepoOr404(ctx, ownerId, slug);
   return ctx.store.listDocs(repo.id).map((doc) => presentDoc(ctx, repo, doc, origin));
 }

@@ -17,7 +17,7 @@ npm install -g @maradocs/cli
 maradocs auth login --server https://docs.example.com --api-key mdo_...
 ```
 
-No API key yet? `maradocs auth bootstrap --server https://docs.example.com` mints a publish-scoped key with the dashboard admin password and saves it — no dashboard visit needed.
+No API key yet? `maradocs auth bootstrap --server https://docs.example.com --email you@example.com` signs in with your MaraDocs account, mints a publish-scoped key and saves it — no dashboard visit needed (add `--register` on a fresh server).
 
 For local development:
 

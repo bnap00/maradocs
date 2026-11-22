@@ -10,7 +10,8 @@ reports on a MaraDocs server.
 
 Both scripts print exactly one JSON object on stdout; progress goes to
 stderr. Credentials come from `MARADOCS_SERVER_URL`/`MARADOCS_API_KEY` or
-fall back to the config saved by `maradocs auth login`.
+fall back to the config saved by `maradocs auth bootstrap --email ...`
+(signs in with your MaraDocs account and mints a key) or `maradocs auth login`.
 
 See [skill/SKILL.md](./skill/SKILL.md) for inputs and usage, and the main
 repository README for setup and authentication:

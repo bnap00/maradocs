@@ -14,7 +14,7 @@ Thanks for your interest! Here's how to get set up and make a contribution.
 git clone https://github.com/bnap00/maradocs
 cd maradocs
 pnpm install
-cp .env.example .env   # fill in ADMIN_PASSWORD + COOKIE_SECRET
+cp .env.example .env   # optional; no secrets needed
 pre-commit install     # Gitleaks secret scan on every commit (pipx install pre-commit)
 ```
 

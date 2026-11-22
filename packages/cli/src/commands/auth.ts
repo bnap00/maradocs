@@ -1,18 +1,31 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { ApiError } from "../client.js";
-import { clearConfig, configPath, loadConfig, saveConfig } from "../config.js";
-import { MaraClient } from "../client.js";
+import { ApiError, MaraClient, type AuthSession } from "../client.js";
+import { clearConfig, configPath, loadConfig, resolveConfig, saveConfig } from "../config.js";
 import { printJson, setJsonMode, ui } from "../output.js";
 
 async function promptSecret(question: string): Promise<string> {
   // Prompts go to stderr so stdout stays clean for --json consumers.
   const prompt = process.stderr;
   if (!input.isTTY || !output.isTTY) {
+    // Non-interactive: read one line from stdin (lets scripts pipe a secret
+    // in). Fail on EOF instead of hanging or exiting silently.
     const rl = createInterface({ input, output: prompt });
     try {
-      return (await rl.question(question)).trim();
+      return await new Promise<string>((resolve, reject) => {
+        let answered = false;
+        rl.once("close", () => {
+          if (!answered) reject(new Error(`No input for "${question.trim()}" (stdin closed).`));
+        });
+        rl.question(question).then(
+          (answer) => {
+            answered = true;
+            resolve(answer.trim());
+          },
+          reject,
+        );
+      });
     } finally {
       rl.close();
     }
@@ -55,6 +68,166 @@ async function promptSecret(question: string): Promise<string> {
     input.resume();
     input.on("data", onData);
   });
+}
+
+function isInteractive(): boolean {
+  return Boolean(input.isTTY && process.stderr.isTTY);
+}
+
+async function promptLine(question: string): Promise<string> {
+  const rl = createInterface({ input, output: process.stderr });
+  try {
+    return (await rl.question(question)).trim();
+  } finally {
+    rl.close();
+  }
+}
+
+interface BootstrapOptions {
+  server: string;
+  email?: string;
+  password?: string;
+  register?: boolean;
+  claimPassword?: string;
+  adminPassword?: string;
+  name: string;
+  scopes: string;
+  save: boolean;
+  json?: boolean;
+}
+
+/** Shared options for `auth bootstrap` and its `auth register` alias. */
+function bootstrapOptions(cmd: Command): Command {
+  return cmd
+    .requiredOption("-s, --server <url>", "MaraDocs server base URL")
+    .option("-e, --email <email>", "Account email (env MARADOCS_EMAIL; prompted if omitted)")
+    .option(
+      "-p, --password <password>",
+      "Account password (env MARADOCS_PASSWORD; prompted without echo if omitted)",
+    )
+    .option(
+      "--claim-password <password>",
+      "Claim password for the first account on a claim-protected server (env MARADOCS_CLAIM_PASSWORD)",
+    )
+    .addOption(new Option("--admin-password <password>").hideHelp())
+    .option("-n, --name <name>", "Display name for the new API key", "cli-bootstrap")
+    .option("--scopes <scopes>", "Comma-separated scopes: read,publish,admin", "publish")
+    .option("--no-save", "Print the key without writing ~/.maradocs/config.json")
+    .option("--json", "Print the result as JSON");
+}
+
+async function signIn(
+  client: MaraClient,
+  server: string,
+  opts: BootstrapOptions,
+  email: string,
+  password: string,
+): Promise<AuthSession> {
+  if (!opts.register) {
+    try {
+      return await client.login(email, password);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        throw new ApiError(
+          401,
+          err.code,
+          `${err.message}. No account yet? Re-run with --register to create one.`,
+        );
+      }
+      throw err;
+    }
+  }
+
+  const config = await client.authConfig();
+  if (!config.registration) {
+    throw new Error(
+      `Registration is not allowed on ${server} (it is closed, or the first account already exists). ` +
+        "Sign in with an existing account by dropping --register, or ask the server operator to set REGISTRATION=open.",
+    );
+  }
+  if (password.length < config.minPasswordLength) {
+    throw new Error(`Password must be at least ${config.minPasswordLength} characters.`);
+  }
+  let claimPassword = opts.claimPassword ?? process.env.MARADOCS_CLAIM_PASSWORD;
+  if (config.claimRequired && !claimPassword) {
+    if (!isInteractive()) {
+      throw new Error(
+        `${server} requires a claim password to create its first account (the server's ADMIN_PASSWORD). ` +
+          "Pass --claim-password or set MARADOCS_CLAIM_PASSWORD.",
+      );
+    }
+    claimPassword = await promptSecret("Claim password (the server's ADMIN_PASSWORD): ");
+    if (!claimPassword) throw new Error("A claim password is required to create the first account.");
+  }
+  return client.register(email, password, claimPassword || undefined);
+}
+
+async function runBootstrap(opts: BootstrapOptions): Promise<void> {
+  setJsonMode(Boolean(opts.json));
+  if (opts.adminPassword !== undefined) {
+    throw new Error(
+      "--admin-password was removed: MaraDocs now uses email + password accounts. " +
+        "Use --email <email> and --password <password> (or MARADOCS_PASSWORD). " +
+        "On a fresh or upgraded server, add --register to create the first account; " +
+        "if it asks for a claim password, pass the old ADMIN_PASSWORD as --claim-password.",
+    );
+  }
+  const server = opts.server.replace(/\/$/, "");
+
+  let email = (opts.email ?? process.env.MARADOCS_EMAIL ?? "").trim();
+  if (!email && isInteractive()) email = await promptLine("Email: ");
+  if (!email) throw new Error("--email is required (or set MARADOCS_EMAIL).");
+
+  const password =
+    opts.password ?? process.env.MARADOCS_PASSWORD ?? (await promptSecret("Password: "));
+  if (!password) throw new Error("A password is required (--password, MARADOCS_PASSWORD, or the prompt).");
+
+  const client = new MaraClient({ server, apiKey: null });
+  const session = await signIn(client, server, opts, email, password);
+  const token = session.token;
+  if (!token) {
+    throw new Error(
+      `${server} did not return a session token (it treated this request as a browser). ` +
+        "Check that no proxy adds an Origin header.",
+    );
+  }
+
+  const scopes = opts.scopes
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let created: Awaited<ReturnType<MaraClient["createApiKey"]>>;
+  try {
+    created = await client.createApiKey(token, { name: opts.name, scopes });
+  } finally {
+    // The session was only needed to mint the key: revoke it rather than
+    // leave a 30-day account credential behind.
+    await client.logout(token).catch(() => undefined);
+  }
+
+  if (opts.save) {
+    saveConfig({ server, apiKey: created.key });
+  }
+  if (opts.json) {
+    printJson({
+      server,
+      saved: opts.save,
+      registered: Boolean(opts.register),
+      user: session.user,
+      ...created,
+    });
+    return;
+  }
+  if (opts.register) ui.success(`Created account ${session.user.email}.`);
+  if (opts.save) {
+    ui.success(`Saved credentials to ${configPath()}`);
+  }
+  ui.kv("Server", server);
+  ui.kv("Account", session.user.email);
+  ui.kv("Key name", created.name);
+  ui.kv("Scopes", created.scopes.join(", "));
+  ui.kv("API key", created.key);
+  ui.warn("The API key is shown once. Store it securely.");
 }
 
 async function promptCredentials(defaultServer?: string): Promise<{ server: string; apiKey: string | null }> {
@@ -129,54 +302,29 @@ export function registerAuth(program: Command): void {
       }
     });
 
-  auth
-    .command("bootstrap")
-    .description("Mint a new API key with the admin password and save it locally")
-    .requiredOption("-s, --server <url>", "MaraDocs server base URL")
-    .option("--admin-password <password>", "Dashboard admin password (prompted if omitted)")
-    .option("-n, --name <name>", "Display name for the new API key", "cli-bootstrap")
-    .option("--scopes <scopes>", "Comma-separated scopes: read,publish,admin", "publish")
-    .option("--no-save", "Print the key without writing ~/.maradocs/config.json")
-    .option("--json", "Print the result as JSON")
-    .action(
-      async (opts: {
-        server: string;
-        adminPassword?: string;
-        name: string;
-        scopes: string;
-        save: boolean;
-        json?: boolean;
-      }) => {
-        setJsonMode(Boolean(opts.json));
-        const server = opts.server.replace(/\/$/, "");
-        const adminPassword = opts.adminPassword ?? (await promptSecret("Admin password: "));
-        if (!adminPassword) throw new Error("Admin password is required.");
+  bootstrapOptions(
+    auth
+      .command("bootstrap")
+      .description(
+        "Sign in with your MaraDocs account (email + password), mint an API key and save it locally",
+      ),
+  )
+    .option("--register", "Create the account first (first account on a fresh server, or REGISTRATION=open)")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ maradocs auth bootstrap --server https://docs.example.com --email you@example.com
+  $ maradocs auth bootstrap --server http://localhost:8787 --email you@example.com --register
+  $ MARADOCS_PASSWORD=... maradocs auth bootstrap -s https://docs.example.com -e you@example.com --json`,
+    )
+    .action((opts: BootstrapOptions) => runBootstrap(opts));
 
-        const client = new MaraClient({ server, apiKey: null });
-        const { token } = await client.adminLogin(adminPassword);
-        const scopes = opts.scopes
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const created = await client.createApiKey(token, { name: opts.name, scopes });
-
-        if (opts.save) {
-          saveConfig({ server, apiKey: created.key });
-        }
-        if (opts.json) {
-          printJson({ server, saved: opts.save, ...created });
-          return;
-        }
-        if (opts.save) {
-          ui.success(`Saved credentials to ${configPath()}`);
-        }
-        ui.kv("Server", server);
-        ui.kv("Key name", created.name);
-        ui.kv("Scopes", created.scopes.join(", "));
-        ui.kv("API key", created.key);
-        ui.warn("The API key is shown once. Store it securely.");
-      },
-    );
+  bootstrapOptions(
+    auth
+      .command("register")
+      .description("Create a MaraDocs account, then mint and save an API key (alias of `auth bootstrap --register`)"),
+  ).action((opts: BootstrapOptions) => runBootstrap({ ...opts, register: true }));
 
   auth
     .command("logout")
@@ -192,7 +340,13 @@ export function registerAuth(program: Command): void {
     .option("--json", "Print the status as JSON")
     .action(async (opts: { json?: boolean }) => {
       setJsonMode(Boolean(opts.json));
-      const cfg = loadConfig();
+      // Same resolution as every other command: env overrides win.
+      let cfg: ReturnType<typeof resolveConfig> | null;
+      try {
+        cfg = resolveConfig();
+      } catch {
+        cfg = null;
+      }
       if (!cfg) {
         if (opts.json) {
           printJson({ loggedIn: false });

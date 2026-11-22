@@ -6,15 +6,17 @@ MaraDocs is configured through environment variables. Docker Compose reads these
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ADMIN_PASSWORD` | yes | none | Dashboard login password. Hashed in memory at startup. |
-| `COOKIE_SECRET` | yes in production | dev-only fallback | Secret used to sign password-gate cookies. Must be at least 32 characters in production. |
 | `PUBLIC_BASE_URL` | yes in production | none | External base URL used in publish responses. |
 
-Generate a cookie secret:
+No secrets are required: accounts are created in the dashboard (see [AUTH.md](AUTH.md)).
 
-```bash
-openssl rand -hex 32
-```
+## Accounts and Secrets
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REGISTRATION` | `first` | Who can create accounts: `first` (only the first account), `open` (anyone), `closed` (nobody). |
+| `COOKIE_SECRET` | generated | Signs report-unlock cookies. If unset, a random secret is generated on first start and stored in the database. If set, it must be at least 32 characters (`openssl rand -hex 32`). |
+| `ADMIN_PASSWORD` | unset | **Legacy.** Only used as the claim password for the first account when upgrading an instance from the admin-password version. Ignored once any account exists. |
 
 ## Core Settings
 
@@ -25,7 +27,7 @@ openssl rand -hex 32
 | `DATA_DIR` | `/data` in Docker | Directory for SQLite metadata and report files. |
 | `DEFAULT_REPO_ACCESS` | `private` | Default access for newly created repositories. Must be `public`, `password`, or `private`. |
 | `MAX_UPLOAD_MB` | `50` | Per-upload bundle limit in megabytes. |
-| `BCRYPT_ROUNDS` | `12` | bcrypt cost for admin and password-gate hashes. Must be ≥ 10 in production. Lower values are used only in tests. |
+| `BCRYPT_ROUNDS` | `12` | bcrypt cost for account and report-password hashes. Must be ≥ 10 in production. Lower values are used only in tests. |
 | `LOG_LEVEL` | `info` | Fastify/Pino log level. |
 | `NO_PRETTY_LOG` | unset | Disable pretty logs in development/test runs. |
 

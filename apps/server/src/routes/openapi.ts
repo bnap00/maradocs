@@ -112,6 +112,32 @@ function errorResponse(description: string) {
   };
 }
 
+const user = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    email: { type: "string" },
+    createdAt: { type: "string", format: "date-time" },
+  },
+};
+
+function sessionResponse(description: string) {
+  return {
+    description: `${description}. Sets the maradocs_session cookie; non-browser clients (no Origin / Sec-Fetch-Site) also get the token.`,
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          properties: {
+            user: { $ref: "#/components/schemas/User" },
+            token: { type: "string", description: "Session token (non-browser clients only)" },
+          },
+        },
+      },
+    },
+  };
+}
+
 export const openapiSpec = {
   openapi: "3.1.0",
   info: {
@@ -119,7 +145,9 @@ export const openapiSpec = {
     version: "0.1.0",
     description:
       "Machine API for publishing static HTML reports and managing repositories, documents, and versions. " +
-      "All /api/v1 endpoints (except auth login and public-config) require a MaraDocs API key sent as a bearer token.",
+      "Machine endpoints (/api/v1/repos…) require a MaraDocs API key sent as a bearer token; every key belongs to a user account " +
+      "and only sees that account's repositories. Account endpoints (/api/v1/auth…) use a session: the session token returned by " +
+      "register/login as a bearer token (CLI), or the `maradocs_session` cookie (browser; unsafe requests must send `x-maradocs: 1`).",
     license: { name: "MIT", url: "https://github.com/bnap00/maradocs/blob/main/LICENSE" },
   },
   externalDocs: {
@@ -133,10 +161,11 @@ export const openapiSpec = {
         scheme: "bearer",
         description: "MaraDocs API key (mdo_…) created in the dashboard or via POST /api/v1/auth/keys",
       },
-      adminSession: {
+      session: {
         type: "http",
         scheme: "bearer",
-        description: "Admin session token returned by POST /api/v1/auth/login",
+        description:
+          "Session token returned by POST /api/v1/auth/login or /register (non-browser clients). Browsers use the maradocs_session cookie instead and must send `x-maradocs: 1` on unsafe requests.",
       },
     },
     schemas: {
@@ -145,6 +174,7 @@ export const openapiSpec = {
       DocumentSummary: documentSummary,
       DocumentVersion: documentVersion,
       PublishResult: publishResult,
+      User: user,
     },
   },
   security: [{ apiKey: [] }],
@@ -172,11 +202,37 @@ export const openapiSpec = {
         },
       },
     },
-    "/api/v1/auth/login": {
+    "/api/v1/auth/config": {
+      get: {
+        summary: "Account sign-up configuration",
+        security: [],
+        responses: {
+          "200": {
+            description: "Whether registration is currently allowed and whether the first account needs the claim password",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    registration: { type: "boolean" },
+                    claimRequired: { type: "boolean" },
+                    firstAccount: { type: "boolean", description: "No account exists yet" },
+                    minPasswordLength: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/v1/auth/register": {
       post: {
-        summary: "Exchange the admin password for a session token",
+        summary: "Create an account",
         description:
-          "Rate limited to 5 attempts per 15 minutes. Use the returned token as a bearer token for /api/v1/auth/keys to bootstrap an API key headlessly.",
+          "Allowed according to REGISTRATION (open | first | closed; default first = only while no account exists). " +
+          "When ADMIN_PASSWORD is configured and no account exists yet, claimPassword must equal it. " +
+          "The first account adopts repositories and keys created before accounts existed. Rate limited to 5 per hour per IP.",
         security: [],
         requestBody: {
           required: true,
@@ -184,30 +240,148 @@ export const openapiSpec = {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["password"],
-                properties: { password: { type: "string" } },
+                required: ["email", "password"],
+                properties: {
+                  email: { type: "string", format: "email", maxLength: 254 },
+                  password: { type: "string", minLength: 12, maxLength: 1024 },
+                  claimPassword: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": sessionResponse("Account created and signed in"),
+          "400": errorResponse("Validation failed"),
+          "403": errorResponse("registration_closed or claim_required"),
+          "409": errorResponse("Email already registered"),
+          "429": errorResponse("Too many attempts"),
+        },
+      },
+    },
+    "/api/v1/auth/login": {
+      post: {
+        summary: "Sign in with email and password",
+        description:
+          "Rate limited to 5 attempts per 15 minutes per IP. Non-browser clients receive the session token in the body; use it as a bearer token for /api/v1/auth/keys to bootstrap an API key headlessly. Sessions last 30 days, extended while in use.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "password"],
+                properties: { email: { type: "string" }, password: { type: "string" } },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": sessionResponse("Signed in"),
+          "401": errorResponse("Invalid email or password"),
+          "429": errorResponse("Too many attempts"),
+        },
+      },
+    },
+    "/api/v1/auth/me": {
+      get: {
+        summary: "Current account",
+        security: [{ session: [] }],
+        responses: {
+          "200": {
+            description: "The signed-in user",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { user: { $ref: "#/components/schemas/User" } } },
+              },
+            },
+          },
+          "401": errorResponse("Missing or invalid session"),
+        },
+      },
+    },
+    "/api/v1/auth/logout": {
+      post: {
+        summary: "Sign out this session",
+        security: [{ session: [] }],
+        responses: { "204": { description: "Signed out" }, "401": errorResponse("Missing or invalid session") },
+      },
+    },
+    "/api/v1/auth/logout-others": {
+      post: {
+        summary: "Sign out every other session of this account",
+        security: [{ session: [] }],
+        responses: {
+          "200": {
+            description: "Number of sessions revoked",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { revoked: { type: "integer" } } },
+              },
+            },
+          },
+          "401": errorResponse("Missing or invalid session"),
+        },
+      },
+    },
+    "/api/v1/auth/change-password": {
+      post: {
+        summary: "Change the account password",
+        description: "Revokes all other sessions of the account. Rate limited to 10 per hour per account.",
+        security: [{ session: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["currentPassword", "newPassword"],
+                properties: {
+                  currentPassword: { type: "string" },
+                  newPassword: { type: "string", minLength: 12, maxLength: 1024 },
+                },
               },
             },
           },
         },
         responses: {
           "200": {
-            description: "Session token (also set as an httpOnly cookie)",
+            description: "Password changed",
             content: {
               "application/json": {
-                schema: { type: "object", properties: { token: { type: "string" } } },
+                schema: { type: "object", properties: { user: { $ref: "#/components/schemas/User" } } },
               },
             },
           },
-          "401": errorResponse("Invalid password"),
-          "429": errorResponse("Too many attempts"),
+          "401": errorResponse("Current password is incorrect, or no session"),
+        },
+      },
+    },
+    "/api/v1/auth/account": {
+      delete: {
+        summary: "Delete the account and everything it owns",
+        description:
+          "Deletes the account, its sessions, API keys, machines, repositories, documents, versions, stored files and audit log.",
+        security: [{ session: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { type: "object", required: ["password"], properties: { password: { type: "string" } } },
+            },
+          },
+        },
+        responses: {
+          "204": { description: "Account deleted" },
+          "401": errorResponse("Password is incorrect, or no session"),
         },
       },
     },
     "/api/v1/auth/keys": {
       get: {
-        summary: "List API keys (metadata only)",
-        security: [{ adminSession: [] }],
+        summary: "List your API keys (metadata only)",
+        security: [{ session: [] }],
         responses: {
           "200": {
             description: "API key metadata; secrets are never returned",
@@ -226,7 +400,7 @@ export const openapiSpec = {
       post: {
         summary: "Create an API key",
         description: "The raw key (mdo_…) is returned once and never stored server-side.",
-        security: [{ adminSession: [] }],
+        security: [{ session: [] }],
         requestBody: {
           required: true,
           content: {
@@ -271,11 +445,12 @@ export const openapiSpec = {
     "/api/v1/auth/keys/{id}": {
       delete: {
         summary: "Revoke an API key",
-        security: [{ adminSession: [] }],
+        security: [{ session: [] }],
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: {
           "204": { description: "Key revoked" },
           "401": errorResponse("Missing or invalid session"),
+          "404": errorResponse("Key not found (or owned by another account)"),
         },
       },
     },
@@ -284,7 +459,7 @@ export const openapiSpec = {
         summary: "List repositories",
         responses: {
           "200": {
-            description: "All repositories",
+            description: "Repositories owned by the API key's account",
             content: {
               "application/json": {
                 schema: {
@@ -336,7 +511,7 @@ export const openapiSpec = {
           "400": errorResponse("Validation failed"),
           "401": errorResponse("Missing or invalid API key"),
           "403": errorResponse("Insufficient scope"),
-          "409": errorResponse("Repository already exists"),
+          "409": errorResponse("Repository already exists, or the slug is taken by another account"),
         },
       },
     },
