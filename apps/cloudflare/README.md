@@ -18,7 +18,7 @@ The full guide (custom domains, security model, troubleshooting, differences fro
 | Worker | `maradocs` | API, reports at `/r/<repo>/<doc>/`, dashboard at `/dashboard/` |
 | D1 database (binding `DB`) | `<worker>-db`, e.g. `maradocs-db` | Accounts, repositories, documents, versions, key hashes, sessions, settings, audit log |
 | R2 bucket (binding `BUCKET`) | `<worker>-bucket`, e.g. `maradocs-bucket` | Report files, one object per version |
-| Secrets | none required | `ADMIN_PASSWORD` is an optional claim password for the first account (see [Accounts](#accounts)) |
+| Secrets | `ADMIN_PASSWORD` (asked by the Deploy button) | Claim password for the first account (see [Accounts](#accounts)); optional with `npm run setup`, which creates your account right away |
 
 `wrangler.jsonc` declares only the bindings, so Wrangler creates the database and bucket on the first deploy and names them after the Worker. A second deployment under another Worker name (`npm run setup -- --name maradocs-staging`) therefore gets its own database and bucket instead of sharing yours. Later deploys reuse the resources already bound to the Worker. The Deploy button shows the names on its setup screen, where you can change them.
 
@@ -26,7 +26,7 @@ The Worker creates its own schema on the first request. There are no migrations,
 
 ## Deploy
 
-**One click.** Use the button above. Cloudflare copies this folder into a new GitHub/GitLab repository, and creates the D1 database and R2 bucket; no secrets are needed. Then open `https://<worker>.<you>.workers.dev/dashboard/` right away and create your account: the first account owns the deployment (see [Accounts](#accounts)). Every push to that repository redeploys. R2 must be enabled on your account once (Cloudflare dashboard → R2).
+**One click.** Use the button above. Cloudflare copies this folder into a new GitHub/GitLab repository, and creates the D1 database and R2 bucket. It asks for one secret, `ADMIN_PASSWORD`: a claim password (generate one with `openssl rand -base64 24` and keep it). Then open `https://<worker>.<you>.workers.dev/dashboard/` and create your account, entering the claim password on the sign-up form; the first account owns the deployment (see [Accounts](#accounts)), so nobody who finds the URL first can take it. Every push to that repository redeploys. R2 must be enabled on your account once (Cloudflare dashboard → R2).
 
 **One command.** With Node 22+, pick the line for your checkout:
 
@@ -61,7 +61,7 @@ git checkout wrangler.jsonc    # drop the database_id Wrangler wrote, if any
 MaraDocs uses email + password accounts. Each account has its own repositories, documents, API keys, machines, activity log and default access setting, invisible to other accounts. Repository slugs are unique across the deployment (they are part of report URLs), so a slug another account uses answers `409 Repository slug '<slug>' is already taken`.
 
 - **Who can sign up** is set by the `REGISTRATION` var: `first` (default) allows only the first account, the owner; `open` lets anyone create an account; `closed` allows none (existing accounts only).
-- **Claim password.** If the `ADMIN_PASSWORD` secret is set (or a dashboard password was set before accounts existed) and no account exists yet, creating the first account requires it as the *claim password*. This keeps a stranger from claiming a deployment that already holds data. Once any account exists it is ignored (the Worker logs a reminder to remove it); it is never used to sign in. Fresh installs don't need it.
+- **Claim password.** If the `ADMIN_PASSWORD` secret is set (or a dashboard password was set before accounts existed) and no account exists yet, creating the first account requires it as the *claim password*. This keeps a stranger from claiming a fresh deployment before you do, or one that already holds data. The Deploy button asks for it; `npm run setup` doesn't need it because it creates your account immediately. Once any account exists it is ignored (the Worker logs a reminder to remove it); it is never used to sign in.
 - **Upgrading from the single-admin version.** Everyone signs in again. The first account created adopts every existing repository, document, API key and audit entry; create it with your old admin password as the claim password (`maradocs auth bootstrap --register --claim-password …` or the dashboard's sign-up form). Old API keys work again once adopted.
 - **Sessions** last 30 days and extend with use (`maradocs_session` cookie in the browser, `Authorization: Bearer` for the CLI). Changing your password signs out your other sessions; **Settings → Sign out other sessions** does that on demand. **Settings → Delete account** removes the account with all its data and stored files.
 - There is no email verification or password reset. A forgotten password: sign in with another account, or delete the account row in D1 (`npx wrangler d1 execute DB --remote --command "DELETE FROM users WHERE email = 'you@example.com'"`; its repositories then belong to nobody until you remove them).
@@ -95,7 +95,7 @@ Vars live in `wrangler.jsonc` → `vars`, which is the source of truth: every de
 | Name | Default | Notes |
 |------|---------|-------|
 | `REGISTRATION` | `first` | `first` (only the first account), `open` (anyone can sign up) or `closed`. See [Accounts](#accounts). |
-| `ADMIN_PASSWORD` (secret) | — | Optional claim password: required to create the first account while none exists, ignored afterwards. Never used to sign in. |
+| `ADMIN_PASSWORD` (secret) | — | Claim password (asked by the Deploy button): required to create the first account while none exists, ignored afterwards. Never used to sign in. |
 | `COOKIE_SECRET` (secret) | generated | Optional. At least 32 characters (`openssl rand -hex 32`); shorter values are ignored (the Worker logs a warning) and the generated secret is used. Changing it locks out everyone who unlocked a password-protected report. |
 | `PUBLIC_BASE_URL` | request origin | Optional external origin for API links. |
 | `DEFAULT_REPO_ACCESS` | `private` | `public`, `password` or `private`; each account's dashboard setting overrides it for that account. |

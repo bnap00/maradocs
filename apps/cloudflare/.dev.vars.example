@@ -12,10 +12,11 @@
 # REGISTRATION=first
 #
 # Claim password. While no account exists, creating the first one requires
-# this value, so a stranger can't claim a deployment that already holds data.
-# Ignored once any account exists, and never used to sign in. Fresh installs
-# can leave it unset.
-# ADMIN_PASSWORD=
+# this value, so nobody else can claim the deployment before you do. Ignored
+# once any account exists, and never used to sign in. Left uncommented so the
+# Deploy to Cloudflare button asks for it; locally it can stay empty (an empty
+# value means no claim password).
+ADMIN_PASSWORD=
 #
 # HMAC key for unlock cookies and report capability tokens. At least 32
 # characters (`openssl rand -hex 32`); shorter values are ignored (with a

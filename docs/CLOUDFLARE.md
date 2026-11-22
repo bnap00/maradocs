@@ -23,7 +23,7 @@ The machine API is the same as the Docker/Node server's (with the few auth-endpo
 | Worker | `maradocs` | API, report serving at `/r/…`, dashboard at `/dashboard/` |
 | D1 database (binding `DB`) | `<worker>-db` (`maradocs-db`) | Accounts, repositories, documents, versions, API key hashes, sessions, settings, audit log, rate-limit counters |
 | R2 bucket (binding `BUCKET`) | `<worker>-bucket` (`maradocs-bucket`) | Report files: one object per version (`versions/<versionId>.bin`) |
-| Secrets | none required | `ADMIN_PASSWORD` is only an optional claim password for the first account (see [Accounts](#accounts)) |
+| Secrets | `ADMIN_PASSWORD` (asked by the Deploy button) | Claim password for the first account (see [Accounts](#accounts)); optional with the one-command setup, which creates your account right away |
 | Cron trigger | `17 3 * * *` (daily) | Removes R2 objects that no version references (left behind by interrupted publishes). Cron triggers are free on every plan. |
 
 `wrangler.jsonc` declares the `DB` and `BUCKET` bindings without names or IDs. On the first deploy, Wrangler (and the Deploy button) creates a database and a bucket named after the Worker. Later deploys reuse whatever is already bound to the Worker. Because the names come from the Worker name, a second deployment such as `npm run setup -- --name maradocs-staging` gets its own `maradocs-staging-db` and `maradocs-staging-bucket`. It never shares repositories, keys, passwords or sessions with your main deployment, and it never picks up an unrelated database that happens to be called `maradocs`.
@@ -41,8 +41,9 @@ The Worker applies its database schema itself on the first request, so there are
 1. Click the button and sign in to Cloudflare.
 2. Connect GitHub or GitLab. Cloudflare copies `apps/cloudflare` into a new repository in your account and connects it to Workers Builds, so every push to that repository redeploys.
 3. The D1 database and R2 bucket are provisioned for you; keep or rename them on the setup screen.
-4. Click **Create and deploy**. No secrets are needed.
-5. When the build finishes, open `https://maradocs.<your-subdomain>.workers.dev/dashboard/` **right away** and create your account. With the default `REGISTRATION=first`, the first account owns the deployment and sign-up then closes.
+4. Enter a value for the `ADMIN_PASSWORD` secret: a **claim password** that protects the deployment until you've created your account. Generate one with `openssl rand -base64 24` and keep it for step 6.
+5. Click **Create and deploy**.
+6. When the build finishes, open `https://maradocs.<your-subdomain>.workers.dev/dashboard/` and create your account, entering the claim password on the sign-up form. With the default `REGISTRATION=first`, the first account owns the deployment and sign-up then closes. Afterwards the secret is ignored; you can delete it (`npx wrangler secret delete ADMIN_PASSWORD`, or Worker → Settings → Variables and Secrets).
 
 R2 must be enabled on your account once (Cloudflare dashboard → R2 → enable; the free tier needs no paid plan, but Cloudflare may ask for a payment method on file).
 
@@ -167,7 +168,7 @@ Reports are served with a CSP `sandbox` (opaque origin), so report scripts can't
 | Name | Kind | Default | Description |
 |------|------|---------|-------------|
 | `REGISTRATION` | var | `first` | Who can create accounts: `first` (only the first account), `open` (anyone) or `closed`. See [Accounts](#accounts). |
-| `ADMIN_PASSWORD` | secret, optional | — | Claim password: while no account exists, creating the first one requires it. Ignored afterwards and never used to sign in. Only useful for deployments upgraded from the single-admin version. |
+| `ADMIN_PASSWORD` | secret | — | Claim password: while no account exists, creating the first one requires it. The Deploy button asks for it so nobody can claim a fresh deployment before you; also used when upgrading from the single-admin version. Ignored afterwards and never used to sign in. |
 | `COOKIE_SECRET` | secret, optional | generated, stored in D1 | HMAC key for password-gate unlock cookies and report capability tokens. Must be at least 32 characters (`openssl rand -hex 32`). A shorter value is ignored (the Worker logs a warning) and the generated secret is used instead. Changing it locks out everyone who already unlocked a report. |
 | `PUBLIC_BASE_URL` | var, optional | request origin | External origin used in URLs returned by the API. |
 | `DEFAULT_REPO_ACCESS` | var | `private` | Access for repositories created without an explicit mode (`public`, `password`, `private`). Each account's dashboard setting overrides it for that account. |
@@ -329,7 +330,7 @@ See [Security model](SECURITY.md) for the trust boundaries both editions share.
 | `411 length_required` on publish | The client sent the upload without `Content-Length` (chunked). The CLI, the skill and `curl -F` always send it; for custom clients, buffer the multipart body first. |
 | `400 bad_request` on publish | The zip was rejected: unsafe or duplicate paths, more than 2,000 files, or an empty bundle. The message names the problem. |
 | Sign-up says registration is closed | With `REGISTRATION=first`, only the first account can be created. To add people, set `REGISTRATION` to `open` in `wrangler.jsonc`, redeploy, let them sign up, then set it back. |
-| Sign-up asks for a claim password | The `ADMIN_PASSWORD` secret is set and no account exists yet (an upgraded deployment). Enter that secret, or delete it (`npx wrangler secret delete ADMIN_PASSWORD`) if the deployment has nothing worth protecting. |
+| Sign-up asks for a claim password | The `ADMIN_PASSWORD` secret is set and no account exists yet (the claim password you entered in the Deploy button, or the old admin password of an upgraded deployment). Enter that secret, or delete it (`npx wrangler secret delete ADMIN_PASSWORD`) if the deployment has nothing worth protecting. |
 | Forgot your password | There is no reset email. Delete your sessions and the account row in D1 (`npx wrangler d1 execute DB --remote --command "DELETE FROM users WHERE email = 'you@example.com'"`), then sign up again (temporarily set `REGISTRATION=open` if needed). Repositories of the deleted account stay ownerless and inaccessible until removed. |
 | Report renders without styles or images | The report references its assets by absolute path (`/r/<repo>/<doc>/…`), or loads them in a nested `<iframe>`, which bypasses the capability URL. Browsers that block third-party cookies then load them without credentials. Use relative paths. Public reports are unaffected. |
 | A PDF downloads instead of opening | That's the default: inside the report sandbox Chromium's viewer shows a blank page. Set `PDF_INLINE` to `"true"` to serve PDFs inline. |

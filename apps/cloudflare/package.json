@@ -57,7 +57,7 @@
         "description": "R2 bucket that stores the published report files (one object per version). Created for you; keep it private \u2014 the Worker serves files with access checks."
       },
       "ADMIN_PASSWORD": {
-        "description": "Optional claim password. While no account exists, creating the first account in the dashboard requires it, so nobody else can claim your deployment before you do. Ignored once an account exists; it is never used to sign in. Use a long random value, e.g. `openssl rand -base64 24`."
+        "description": "Claim password. While no account exists, creating the first account in the dashboard requires it, so nobody else can claim your deployment before you do. Ignored once an account exists; it is never used to sign in. Use a long random value, e.g. `openssl rand -base64 24`."
       }
     }
   }

@@ -44,7 +44,7 @@ Prefer serverless? `apps/cloudflare` is a Cloudflare-native edition: one Worker 
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bnap00/maradocs/tree/main/apps/cloudflare)
 
-The button provisions D1 and R2; no secrets are needed. Open the dashboard right after it deploys and create your account (the first account owns the deployment). From a clone, one command deploys, creates or signs in to your account, and connects the CLI:
+The button provisions D1 and R2 and asks for one secret, `ADMIN_PASSWORD`: a claim password you enter when creating your account in the dashboard, so nobody else can claim the deployment first (the first account owns it). From a clone, one command deploys, creates or signs in to your account, and connects the CLI:
 
 ```bash
 pnpm install && pnpm cf:deploy   # runs apps/cloudflare's setup script; pass flags directly, e.g. pnpm cf:deploy --dry-run
